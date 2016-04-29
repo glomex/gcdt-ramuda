@@ -41,6 +41,8 @@ doc = """Usage:
         ramuda unwire [--env=<env>]
         ramuda delete -f <lambda>
         ramuda rollback <lambda> [<version>]
+        ramuda ping <lambda> [<version>]
+
 
 
 -h --help           show this
@@ -231,10 +233,25 @@ def deploy_lambda(function_name, role, handler_filename, handler_function, folde
     if ramuda_utils.lambda_exists(function_name):
         function_version = update_lambda(function_name, handler_filename, handler_function, folders, role,
                       description, timeout, memory, subnet_ids, security_groups)
+        pong = ping(function_name, version=function_version)
+        if "alive" in pong:
+            print (colored.green("Great your'e already accepting a ping in your Lambda function"))
+            print pong
+        else:
+            print (colored.red("Please consider adding a reaction to a ping event to your lambda function"))
+            print pong
         deploy_alias(function_name, function_version)
+
     else:
         function_version=create_lambda(function_name, role, handler_filename, handler_function,
                       folders, description, timeout, memory, subnet_ids, security_groups)
+        pong = ping(function_name, version=function_version)
+        if "alive" in pong:
+            print (colored.green("Great your'e already accepting a ping in your Lambda function"))
+            print pong
+        else:
+            print (colored.red("Please consider adding a reaction to a ping event to your lambda function"))
+            print pong
         deploy_alias(function_name, function_version)
 
 
@@ -444,24 +461,33 @@ def unwire(function_name, s3_event_sources, alias_name=ALIAS_NAME):
     monitoring.slacker_notifcation("systemmessages", message)
 
 
+def ping(function_name, alias_name=ALIAS_NAME, version=None):
+    client = boto3.client('lambda')
+    payload = '{"ramuda_action" : "ping"}'  # default to ping event
+    response = None
+    results = None
+
+    if version:
+        response = client.invoke(
+            FunctionName=function_name,
+            InvocationType='RequestResponse',
+            Payload=payload,
+            Qualifier=version
+        )
+    else:
+        response = client.invoke(
+            FunctionName=function_name,
+            InvocationType='RequestResponse',
+            Payload=payload,
+            Qualifier=alias_name
+        )
+
+    results = response['Payload'].read()  # payload is a 'StreamingBody'
+    print results
+    return results
+
 def main():
-    """
-    # setting up config
-    conf = read_lambda_config()
 
-    lambda_name = conf.get("lambda.name")
-    lambda_description = conf.get("lambda.description")
-    role_arn = conf.get("lambda.role")
-    lambda_handler = conf.get("lambda.handlerFunction")
-    handler_filename = conf.get("lambda.handlerFile")
-    timeout = conf.get_string("lambda.timeout")
-    memory_size = conf.get_string("lambda.memorySize")
-    s3_event_sources = conf.get("lambda.events.s3Sources")
-    zip_name = conf.get("bundling.zip")
-    folders = conf.get("bundling.folders")
-    region = conf.get("deployment.region")
-
-    """
     arguments = docopt(doc)
     # print arguments
     if arguments["list"]:
@@ -516,6 +542,12 @@ def main():
             rollback(arguments["<lambda>"], ALIAS_NAME, arguments["<version>"])
         else:
             rollback(arguments["<lambda>"], ALIAS_NAME)
+    elif arguments["ping"]:
+        ramuda_utils.are_credentials_still_valid()
+        if arguments["<version>"]:
+            ping(arguments["<lambda>"], version=arguments["<version>"])
+        else:
+            ping(arguments["<lambda>"])
 
 
 
