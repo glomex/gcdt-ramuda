@@ -67,7 +67,6 @@ class MonitoringTestCase(TestCase):
         for package in packages:
             print(package)
         self.assertTrue("werkzeug" in packages)
-        self.assertTrue("simplejson" in packages)
         self.assertTrue("troposphere" in packages)
         self.assertTrue("boto3" in packages)
 

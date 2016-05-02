@@ -11,6 +11,8 @@ from pyhocon import config_tree
 from config_reader import get_config_name
 import shutil
 import pathspec
+from pyhocon import ConfigFactory
+
 
 def files_to_zip(path):
     for root, dirs, files in os.walk(path):
@@ -177,3 +179,15 @@ def cleanup_folder(path):
         else:
             print ("deleting file %s") % object
             os.remove(path + "/" + dir)
+
+def read_ramuda_config():
+    homedir = os.path.expanduser('~')
+    ramuda_config_file = homedir + "/" + ".ramuda"
+    try:
+        config = ConfigFactory.parse_file(ramuda_config_file)
+        return config
+    except Exception as e:
+        print e
+        print colored.red("Cannot find file .ramuda in your home directory %s" % ramuda_config_file)
+        print colored.red("Please run 'ramuda configure'")
+        sys.exit(1)

@@ -11,9 +11,12 @@ import monitoring
 from config_reader import read_lambda_config
 from docopt import docopt
 import ramuda_utils
+from ramuda_utils import read_ramuda_config
 from datetime import datetime, timedelta
 from clint.textui import colored
 import sys
+from pyhocon import ConfigFactory
+
 
 # TODO
 
@@ -42,6 +45,7 @@ doc = """Usage:
         ramuda delete -f <lambda>
         ramuda rollback <lambda> [<version>]
         ramuda ping <lambda> [<version>]
+        ramuda configure
 
 
 
@@ -51,6 +55,9 @@ doc = """Usage:
 
 current_path = os.getcwdu()
 ALIAS_NAME="ACTIVE"
+RAMUDA_CONFIG = read_ramuda_config()
+SLACK_TOKEN = RAMUDA_CONFIG.get("ramuda.slack-token")
+
 
 
 def config_from_file(env):
@@ -281,7 +288,7 @@ def create_lambda(function_name, role, handler_filename, handler_function, folde
                                 description, timeout, memory, subnet_ids, security_groups)
     message = "ramuda bot: created new lambda function: %s " % (
         function_name)
-    monitoring.slacker_notifcation("systemmessages", message)
+    monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
     return function_version
 
 def bundle_lambda(handler_filename, folders):
@@ -300,7 +307,7 @@ def update_lambda(function_name, handler_filename, handler_function, folders, ro
     function_version = update_lambda_configuration(function_name, role, handler_function,
                                 description, timeout, memory, subnet_ids, security_groups)
     message = ("ramuda bot: updated lambda function: %s ") % (function_name)
-    monitoring.slacker_notifcation("systemmessages", message)
+    monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
     return function_version
 
 def update_lambda_function_code(function_name, handler_filename, folders):
@@ -386,7 +393,7 @@ def rollback(function_name, alias_name=ALIAS_NAME, version=None):
         update_alias(function_name, version, alias_name)
         message = ("ramuda bot: rolled back lambda function: %s to version %s") % (
             function_name, version)
-        monitoring.slacker_notifcation("systemmessages", message)
+        monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
 
     else:
         print("rolling back to previous version")
@@ -404,7 +411,7 @@ def rollback(function_name, alias_name=ALIAS_NAME, version=None):
 
         message = ("ramuda bot: rolled back lambda function: %s to previous version") % (
             function_name)
-        monitoring.slacker_notifcation("systemmessages", message)
+        monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
 
 
 def delete_lambda(function_name):
@@ -412,7 +419,7 @@ def delete_lambda(function_name):
     response = client.delete_function(FunctionName=function_name)
     print ramuda_utils.json2table(response)
     message = ("ramuda bot: deleted lambda function: %s") % (function_name)
-    monitoring.slacker_notifcation("systemmessages", message)
+    monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
 
 
 def wire(function_name, s3_event_sources=None, time_event_sources=None, alias_name=ALIAS_NAME):
@@ -443,7 +450,7 @@ def wire(function_name, s3_event_sources=None, time_event_sources=None, alias_na
             lambda_add_invoke_permission(
                 function_name, 'events.amazonaws.com', rule_arn)
     message = ("ramuda bot: wiring lambda function: %s with alias %s") % (function_name,alias_name)
-    monitoring.slacker_notifcation("systemmessages", message)
+    monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
 
 
 def unwire(function_name, s3_event_sources, alias_name=ALIAS_NAME):
@@ -458,7 +465,7 @@ def unwire(function_name, s3_event_sources, alias_name=ALIAS_NAME):
             NotificationConfiguration={})
         print ramuda_utils.json2table(response)
     message = ("ramuda bot: unwiring lambda function: %s with alias %s") % (function_name, alias_name)
-    monitoring.slacker_notifcation("systemmessages", message)
+    monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
 
 
 def ping(function_name, alias_name=ALIAS_NAME, version=None):
