@@ -9,6 +9,10 @@ import base64
 from clint.textui import colored
 from pyhocon import config_tree
 from config_reader import get_config_name
+import shutil
+import pathspec
+from pyhocon import ConfigFactory
+
 
 def files_to_zip(path):
     for root, dirs, files in os.walk(path):
@@ -33,6 +37,7 @@ def make_zip_file_bytes(paths, handler, settings=get_config_name("settings")):
     vendored = config_tree.ConfigTree()
     vendored.put("source", "./vendored")
     vendored.put("target", ".")
+    cleanup_folder("./vendored")
     paths.append(vendored)
     with ZipFile(buf, 'w') as z:
         for path in paths:
@@ -46,7 +51,7 @@ def make_zip_file_bytes(paths, handler, settings=get_config_name("settings")):
                 # print "archive target " + archive_target
                 z.write(full_path, archive_target)
         z.write(settings, "settings.conf")
-        z.write(handler, handler)
+        z.write(handler, os.path.basename(handler))
     # print z.printdir()
 
     buffer_mbytes = float(len(buf.getvalue()) / 10000000)
@@ -68,7 +73,7 @@ def are_credentials_still_valid():
 def check_aws_credentials():
     """
     A decorator that will check for valid credentials
-    
+
 
     """
     def wrapper(func):
@@ -139,3 +144,50 @@ def get_remote_code_hash(function_name):
     client = boto3.client("lambda")
     response = client.get_function_configuration(FunctionName=function_name)
     return response["CodeSha256"]
+
+def get_packages_to_ignore(folder):
+    homedir = os.path.expanduser('~')
+    ramuda_ignore_file=homedir+"/"+".ramudaignore"
+    # we try to read ignore patterns from the standard .ramudaignore file
+    # if we can't find one we don't ignore anything
+    # from https://pypi.python.org/pypi/pathspec
+    try:
+        with open(ramuda_ignore_file, 'r') as fh:
+            spec = pathspec.PathSpec.from_lines(pathspec.GitIgnorePattern, fh)
+
+        matches = []
+        for match in spec.match_tree(folder):
+            matches.append(match)
+        return matches
+    except Exception as e:
+        print e
+        return []
+
+def cleanup_folder(path):
+    matches = get_packages_to_ignore(path)
+    result_set = set()
+    for package in matches:
+        split_dir = package.split("/")[0]
+        result_set.add(split_dir)
+        print ("added %s to result set" % split_dir)
+    print result_set
+    for dir in result_set:
+        object = path + "/" + dir
+        if os.path.isdir(object):
+            print ("deleting directory %s") % object
+            shutil.rmtree(path + "/" + dir, ignore_errors=False)
+        else:
+            print ("deleting file %s") % object
+            os.remove(path + "/" + dir)
+
+def read_ramuda_config():
+    homedir = os.path.expanduser('~')
+    ramuda_config_file = homedir + "/" + ".ramuda"
+    try:
+        config = ConfigFactory.parse_file(ramuda_config_file)
+        return config
+    except Exception as e:
+        print e
+        print colored.red("Cannot find file .ramuda in your home directory %s" % ramuda_config_file)
+        print colored.red("Please run 'ramuda configure'")
+        sys.exit(1)
