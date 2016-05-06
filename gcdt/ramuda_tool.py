@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+#from __future__ import print_function
+
 """ramuda.
 Script to deploy Lambda functions to AWS
 """
@@ -15,8 +17,8 @@ from ramuda_utils import read_ramuda_config
 from datetime import datetime, timedelta
 from clint.textui import colored
 import sys
-from pyhocon import ConfigFactory
-
+from cookiecutter.main import cookiecutter
+import utils
 
 # TODO
 
@@ -26,7 +28,6 @@ from pyhocon import ConfigFactory
 # filter requirements
 # manage log groups
 # silence slacker
-# .kumoignore
 # fill description with git commit, jenkins build or local info
 # wire to specific alias
 # provide -e to deploy
@@ -46,6 +47,8 @@ doc = """Usage:
         ramuda rollback <lambda> [<version>]
         ramuda ping <lambda> [<version>]
         ramuda configure
+        ramuda scaffold [<stackname>]
+        ramuda version
 
 
 
@@ -126,7 +129,7 @@ def lambda_add_time_schedule_event_source(rule_name, rule_description, schedule_
                 },
             ]
         )
-    print lambda_arn
+    print (lambda_arn)
     return rule_response["Arn"]
 
 
@@ -493,6 +496,14 @@ def ping(function_name, alias_name=ALIAS_NAME, version=None):
     print results
     return results
 
+def scaffold():
+    # Create project from the cookiecutter-pypackage/ template
+    template_path = os.path.join(
+        os.path.dirname(__file__), 'cookiecutter-ramuda')
+    cookiecutter(template_path)
+
+
+
 def main():
 
     arguments = docopt(doc)
@@ -511,13 +522,9 @@ def main():
         handler_filename = conf.get("lambda.handlerFile")
         timeout = int(conf.get_string("lambda.timeout"))
         memory_size = int(conf.get_string("lambda.memorySize"))
-        # s3_event_sources = conf.get("lambda.events.s3Sources")
-        zip_name = conf.get("bundling.zip")
         folders_from_file = conf.get("bundling.folders")
-        # folders = [source["source"] for source in folders_from_file]
         subnet_ids = conf.get("lambda.vpc.subnetIds", None)
         security_groups = conf.get("lambda.vpc.securityGroups", None)
-        region = conf.get("deployment.region")
         deploy_lambda(lambda_name, role_arn, handler_filename, lambda_handler,
                       folders_from_file, lambda_description, timeout, memory_size, subnet_ids=subnet_ids,
                       security_groups=security_groups)
@@ -555,6 +562,10 @@ def main():
             ping(arguments["<lambda>"], version=arguments["<version>"])
         else:
             ping(arguments["<lambda>"])
+    elif arguments["scaffold"]:
+        scaffold()
+    elif arguments["version"]:
+        utils.version()
 
 
 
