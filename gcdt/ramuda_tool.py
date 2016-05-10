@@ -47,7 +47,7 @@ doc = """Usage:
         ramuda rollback <lambda> [<version>]
         ramuda ping <lambda> [<version>]
         ramuda configure
-        ramuda scaffold [<stackname>]
+        ramuda scaffold [<lambdaname>]
         ramuda version
 
 
