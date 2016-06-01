@@ -481,7 +481,10 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None, alias_
             bucket_notification = client_s3.BucketNotification(bucket_name)
             response = bucket_notification.put(
                 NotificationConfiguration={})
-            print ramuda_utils.json2table(response)
+
+            print(
+                "{}".format(ramuda_utils.json2table(response).encode('utf-8'))
+            )
 
         # CloudWatch Event
         client_event = boto3.client("events")
