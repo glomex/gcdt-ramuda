@@ -9,6 +9,7 @@ import os
 import subprocess
 import uuid
 import boto3
+from botocore.exceptions import ClientError as ClientError
 import monitoring
 from config_reader import read_lambda_config
 from docopt import docopt
@@ -475,6 +476,8 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None, alias_
         client_s3 = boto3.resource('s3')
         for s3_event_source in s3_event_sources:
             bucket_name = s3_event_source.get("bucket")
+            print "\tS3: {}".format(bucket_name)
+
             bucket_notification = client_s3.BucketNotification(bucket_name)
             response = bucket_notification.put(
                 NotificationConfiguration={})
@@ -484,11 +487,18 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None, alias_
         client_event = boto3.client("events")
         for time_event in time_event_sources:
             rule_name = time_event.get("ruleName")
+            print "\tCloudWatch: {}".format(rule_name)
 
             # Delete rule target
-            target_list = client_event.list_targets_by_rule(
-                Rule=rule_name,
-            )
+            try:
+                target_list = client_event.list_targets_by_rule(
+                    Rule=rule_name,
+                )
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                    continue
+                else:
+                    raise e
 
             target_id_list = []
             for target in target_list["Targets"]:
