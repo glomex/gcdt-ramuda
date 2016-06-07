@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#from __future__ import print_function
+# from __future__ import print_function
 
 """ramuda.
 Script to deploy Lambda functions to AWS
@@ -23,7 +23,7 @@ import utils
 # TODO
 
 # stdin via clint
-# introduce own config for environment/account detection
+# introduce own config for account detection
 # reupload on requirements.txt changes
 # filter requirements
 # manage log groups
@@ -33,16 +33,15 @@ import utils
 # provide -e to deploy
 # wire only local folder
 # retain only n versions
-# fix environment handling
 
 # creating docopt parameters and usage help
 doc = """Usage:
-        ramuda bundle [--env=<env>]
-        ramuda deploy [--env=<env>]
+        ramuda bundle
+        ramuda deploy
         ramuda list
         ramuda metrics <lambda>
-        ramuda wire [--env=<env>]
-        ramuda unwire [--env=<env>]
+        ramuda wire
+        ramuda unwire
         ramuda delete -f <lambda>
         ramuda rollback <lambda> [<version>]
         ramuda ping <lambda> [<version>]
@@ -50,24 +49,13 @@ doc = """Usage:
         ramuda scaffold [<lambdaname>]
         ramuda version
 
-
-
 -h --help           show this
-
 """
 
 current_path = os.getcwdu()
-ALIAS_NAME="ACTIVE"
+ALIAS_NAME = "ACTIVE"
 RAMUDA_CONFIG = read_ramuda_config()
 SLACK_TOKEN = RAMUDA_CONFIG.get("ramuda.slack-token")
-
-
-
-def config_from_file(env):
-    os.environ['ENV'] = env
-
-    # read config from given name
-    return read_lambda_config()
 
 
 def create_alias(function_name, function_version, alias_name=ALIAS_NAME):
@@ -95,7 +83,7 @@ def update_alias(function_name, function_version, alias_name=ALIAS_NAME):
 def alias_exists(function_name, alias_name):
     client = boto3.client("lambda")
     try:
-        response = client.get_alias(
+        client.get_alias(
             FunctionName=function_name,
             Name=alias_name
         )
@@ -113,14 +101,14 @@ def deploy_alias(function_name, function_version, alias_name=ALIAS_NAME):
 
 def lambda_add_time_schedule_event_source(rule_name, rule_description, schedule_expression, lambda_arn):
     client = boto3.client("events")
-    response = client.put_rule(
+    client.put_rule(
         Name=rule_name,
         ScheduleExpression=schedule_expression,
         Description=rule_description,
     )
     rule_response = client.describe_rule(Name=rule_name)
     if rule_response is not None:
-        response = client.put_targets(
+        client.put_targets(
             Rule=rule_name,
             Targets=[
                 {
@@ -151,13 +139,7 @@ def lambda_add_invoke_permission(function_name, source_principal, source_arn, al
 def lambda_add_s3_event_source(arn, event, bucket, prefix, suffix):
     """
     Use only prefix OR suffix
-    :param arn:
-    :param event:
-    :param bucket:
-    :param prefix:
-    :param suffix:
     """
-
     filter_rule = None
     json_data = {
         "LambdaFunctionConfigurations": [{
@@ -197,7 +179,9 @@ def lambda_add_s3_event_source(arn, event, bucket, prefix, suffix):
     s3 = boto3.resource('s3')
     bucket_notification = s3.BucketNotification(bucket)
     response = bucket_notification.put(
-        NotificationConfiguration=json_data)
+        NotificationConfiguration=json_data
+    )
+
     return ramuda_utils.json2table(response)
 
 
@@ -215,7 +199,9 @@ def install_dependencies_with_pip(requirements_file, destination_folder):
     try:
         result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
-        sys.stderr.write("\033[01;31mError running command: {} resulted in the following error: \033[01;32m {}".format(e.cmd, e.output))
+        sys.stderr.write(
+            "\033[01;31mError running command: {} resulted in the following error: \033[01;32m {}".format(e.cmd,
+                                                                                                          e.output))
 
     print result
     return result
@@ -242,7 +228,7 @@ def deploy_lambda(function_name, role, handler_filename, handler_function, folde
                   subnet_ids=None, security_groups=None):
     if ramuda_utils.lambda_exists(function_name):
         function_version = update_lambda(function_name, handler_filename, handler_function, folders, role,
-                      description, timeout, memory, subnet_ids, security_groups)
+                                         description, timeout, memory, subnet_ids, security_groups)
         pong = ping(function_name, version=function_version)
         if "alive" in pong:
             print (colored.green("Great your'e already accepting a ping in your Lambda function"))
@@ -253,8 +239,8 @@ def deploy_lambda(function_name, role, handler_filename, handler_function, folde
         deploy_alias(function_name, function_version)
 
     else:
-        function_version=create_lambda(function_name, role, handler_filename, handler_function,
-                      folders, description, timeout, memory, subnet_ids, security_groups)
+        function_version = create_lambda(function_name, role, handler_filename, handler_function,
+                                         folders, description, timeout, memory, subnet_ids, security_groups)
         pong = ping(function_name, version=function_version)
         if "alive" in pong:
             print (colored.green("Great your'e already accepting a ping in your Lambda function"))
@@ -294,6 +280,7 @@ def create_lambda(function_name, role, handler_filename, handler_function, folde
     monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
     return function_version
 
+
 def bundle_lambda(handler_filename, folders):
     install_dependencies_with_pip("requirements.txt", "./vendored")
     zip = ramuda_utils.make_zip_file_bytes(
@@ -308,10 +295,11 @@ def update_lambda(function_name, handler_filename, handler_function, folders, ro
                   subnet_ids=None, security_groups=None):
     update_lambda_function_code(function_name, handler_filename, folders)
     function_version = update_lambda_configuration(function_name, role, handler_function,
-                                description, timeout, memory, subnet_ids, security_groups)
+                                                   description, timeout, memory, subnet_ids, security_groups)
     message = ("ramuda bot: updated lambda function: %s ") % (function_name)
     monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
     return function_version
+
 
 def update_lambda_function_code(function_name, handler_filename, folders):
     install_dependencies_with_pip("requirements.txt", "./vendored")
@@ -452,7 +440,7 @@ def wire(function_name, s3_event_sources=None, time_event_sources=None, alias_na
                 rule_name, rule_description, schedule_expression, lambda_arn)
             lambda_add_invoke_permission(
                 function_name, 'events.amazonaws.com', rule_arn)
-    message = ("ramuda bot: wiring lambda function: %s with alias %s") % (function_name,alias_name)
+    message = ("ramuda bot: wiring lambda function: %s with alias %s") % (function_name, alias_name)
     monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
 
 
@@ -496,6 +484,7 @@ def ping(function_name, alias_name=ALIAS_NAME, version=None):
     print results
     return results
 
+
 def scaffold():
     # Create project from the cookiecutter-pypackage/ template
     template_path = os.path.join(
@@ -503,9 +492,7 @@ def scaffold():
     cookiecutter(template_path)
 
 
-
 def main():
-
     arguments = docopt(doc)
     # print arguments
     if arguments["list"]:
@@ -513,8 +500,7 @@ def main():
     elif arguments["metrics"]:
         get_metrics(arguments["<lambda>"])
     elif arguments["deploy"]:
-        env = (arguments["--env"] if arguments["--env"] else "DEV")
-        conf = config_from_file(env)
+        conf = read_lambda_config()
         lambda_name = conf.get("lambda.name")
         lambda_description = conf.get("lambda.description")
         role_arn = conf.get("lambda.role")
@@ -531,27 +517,23 @@ def main():
     elif arguments["delete"]:
         delete_lambda(arguments["<lambda>"])
     elif arguments["wire"]:
-        env = (arguments["--env"] if arguments["--env"] else "DEV")
-        conf = config_from_file(env)
-        function_name= conf.get("lambda.name")
+        conf = read_lambda_config()
+        function_name = conf.get("lambda.name")
         s3_event_sources = conf.get("lambda.events.s3Sources", [])
         time_event_sources = conf.get("lambda.events.timeSchedules", [])
         wire(function_name, s3_event_sources, time_event_sources)
     elif arguments["unwire"]:
-        env = (arguments["--env"] if arguments["--env"] else "DEV")
-        conf = config_from_file(env)
+        conf = read_lambda_config()
         s3_event_sources = conf.get("lambda.events.s3Sources")
-        function_name= conf.get("lambda.name")
+        function_name = conf.get("lambda.name")
         unwire(function_name, s3_event_sources)
     elif arguments["bundle"]:
-        env = (arguments["--env"] if arguments["--env"] else "DEV")
-        conf = config_from_file(env)
+        conf = read_lambda_config()
         handler_filename = conf.get("lambda.handlerFile")
         folders_from_file = conf.get("bundling.folders")
         bundle_lambda(handler_filename, folders_from_file)
     elif arguments["rollback"]:
-        #env = (arguments["--env"] if arguments["--env"] else "DEV")
-        #conf = config_from_file(env)
+        # conf = read_lambda_config()
         if arguments["<version>"]:
             rollback(arguments["<lambda>"], ALIAS_NAME, arguments["<version>"])
         else:
@@ -566,7 +548,6 @@ def main():
         scaffold()
     elif arguments["version"]:
         utils.version()
-
 
 
 if __name__ == "__main__":
