@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#from __future__ import print_function
+# from __future__ import print_function
 
 """ramuda.
 Script to deploy Lambda functions to AWS
@@ -19,6 +19,13 @@ from clint.textui import colored
 import sys
 from cookiecutter.main import cookiecutter
 import utils
+import logging
+
+from logger import log_json, setup_logger
+
+
+log = setup_logger(logger_name="ramuda_tool")
+from pyspin.spin import make_spin, Default
 
 # TODO
 
@@ -57,10 +64,9 @@ doc = """Usage:
 """
 
 current_path = os.getcwdu()
-ALIAS_NAME="ACTIVE"
+ALIAS_NAME = "ACTIVE"
 RAMUDA_CONFIG = read_ramuda_config()
 SLACK_TOKEN = RAMUDA_CONFIG.get("ramuda.slack-token")
-
 
 
 def config_from_file(env):
@@ -129,7 +135,7 @@ def lambda_add_time_schedule_event_source(rule_name, rule_description, schedule_
                 },
             ]
         )
-    print (lambda_arn)
+
     return rule_response["Arn"]
 
 
@@ -166,7 +172,7 @@ def lambda_add_s3_event_source(arn, event, bucket, prefix, suffix):
             'Events': [event]
         }]
     }
-    print json_data
+
     if prefix is not None and suffix is not None:
         raise Exception("Only select suffix or prefix")
 
@@ -204,6 +210,7 @@ def lambda_add_s3_event_source(arn, event, bucket, prefix, suffix):
 ##################################new stuff###############################
 
 
+# @make_spin(Default, "Installing dependencies...")
 def install_dependencies_with_pip(requirements_file, destination_folder):
     '''
     installs dependencies from a pip requirements_file to a local destination_folder
@@ -215,16 +222,16 @@ def install_dependencies_with_pip(requirements_file, destination_folder):
     try:
         result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
     except subprocess.CalledProcessError as e:
-        sys.stderr.write("\033[01;31mError running command: {} resulted in the following error: \033[01;32m {}".format(e.cmd, e.output))
+        sys.stderr.write(
+            "\033[01;31mError running command: {} resulted in the following error: \033[01;32m {}".format(e.cmd,
+                                                                                                          e.output))
 
-    print result
     return result
 
 
 def list_functions():
     client = boto3.client('lambda')
     response = client.list_functions()
-    print type(response)
     for function in response["Functions"]:
         print function["FunctionName"]
         print "\t" "Memory: " + str(function["MemorySize"])
@@ -239,52 +246,76 @@ def list_functions():
 
 
 def deploy_lambda(function_name, role, handler_filename, handler_function, folders, description, timeout, memory,
-                  subnet_ids=None, security_groups=None):
+                  subnet_ids=None, security_groups=None, stack_bucket=None):
     if ramuda_utils.lambda_exists(function_name):
         function_version = update_lambda(function_name, handler_filename, handler_function, folders, role,
-                      description, timeout, memory, subnet_ids, security_groups)
+                                         description, timeout, memory, subnet_ids, security_groups, stack_bucket=stack_bucket)
         pong = ping(function_name, version=function_version)
         if "alive" in pong:
-            print (colored.green("Great your'e already accepting a ping in your Lambda function"))
-            print pong
+            print (colored.green("Great you're already accepting a ping in your Lambda function"))
         else:
             print (colored.red("Please consider adding a reaction to a ping event to your lambda function"))
-            print pong
         deploy_alias(function_name, function_version)
 
     else:
-        function_version=create_lambda(function_name, role, handler_filename, handler_function,
-                      folders, description, timeout, memory, subnet_ids, security_groups)
+        function_version = create_lambda(function_name, role, handler_filename, handler_function,
+                                         folders, description, timeout, memory, subnet_ids, security_groups,
+                                         stack_bucket)
         pong = ping(function_name, version=function_version)
         if "alive" in pong:
-            print (colored.green("Great your'e already accepting a ping in your Lambda function"))
-            print pong
+            print (colored.green("Great you're already accepting a ping in your Lambda function"))
+
         else:
             print (colored.red("Please consider adding a reaction to a ping event to your lambda function"))
-            print pong
+
         deploy_alias(function_name, function_version)
 
 
 def create_lambda(function_name, role, handler_filename, handler_function, folders, description, timeout, memory,
-                  subnet_ids=None, security_groups=None):
+                  subnet_ids=None, security_groups=None, stack_bucket=None):
     install_dependencies_with_pip("requirements.txt", "./vendored")
     client = boto3.client('lambda')
-    print ("creating function %s with role %s handler %s folders %s timeout %s memory %s") % (
-        function_name, role, handler_filename, str(folders), str(timeout), str(memory))
-    response = client.create_function(
-        FunctionName=function_name,
-        Runtime='python2.7',
-        Role=role,
-        Handler=handler_function,
-        Code={
-            'ZipFile': ramuda_utils.make_zip_file_bytes(handler=handler_filename, paths=folders)
-        },
-        Description=description,
-        Timeout=int(timeout),
-        MemorySize=int(memory),
-        Publish=True,
+    # print ("creating function %s with role %s handler %s folders %s timeout %s memory %s") % (
+    # function_name, role, handler_filename, str(folders), str(timeout), str(memory))
 
-    )
+    if not stack_bucket:
+        zipfile = ramuda_utils.make_zip_file_bytes(handler=handler_filename, paths=folders)
+        log.info(float(len(zipfile) / 10000000))
+        response = client.create_function(
+            FunctionName=function_name,
+            Runtime='python2.7',
+            Role=role,
+            Handler=handler_function,
+            Code={
+                'ZipFile': zipfile
+            },
+            Description=description,
+            Timeout=int(timeout),
+            MemorySize=int(memory),
+            Publish=True
+
+        )
+    else:
+        print "uploading bundle to s3"
+        dest_key, e_tag, version_id = ramuda_utils.s3_upload(stack_bucket, handler_filename, folders, function_name)
+        # print dest_key, e_tag, version_id
+        response = client.create_function(
+            FunctionName=function_name,
+            Runtime='python2.7',
+            Role=role,
+            Handler=handler_function,
+            Code={
+                'S3Bucket': stack_bucket,
+                'S3Key': dest_key,
+                'S3ObjectVersion': version_id
+            },
+            Description=description,
+            Timeout=int(timeout),
+            MemorySize=int(memory),
+            Publish=True
+
+        )
+
     function_version = response["Version"]
     print ramuda_utils.json2table(response)
     update_lambda_configuration(function_name, role, handler_function,
@@ -293,6 +324,7 @@ def create_lambda(function_name, role, handler_filename, handler_function, folde
         function_name)
     monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
     return function_version
+
 
 def bundle_lambda(handler_filename, folders):
     install_dependencies_with_pip("requirements.txt", "./vendored")
@@ -305,30 +337,46 @@ def bundle_lambda(handler_filename, folders):
 
 
 def update_lambda(function_name, handler_filename, handler_function, folders, role, description, timeout, memory,
-                  subnet_ids=None, security_groups=None):
-    update_lambda_function_code(function_name, handler_filename, folders)
+                  subnet_ids=None, security_groups=None, stack_bucket=None):
+    update_lambda_function_code(function_name, handler_filename, folders, stack_bucket=stack_bucket)
     function_version = update_lambda_configuration(function_name, role, handler_function,
-                                description, timeout, memory, subnet_ids, security_groups)
+                                                   description, timeout, memory, subnet_ids, security_groups)
     message = ("ramuda bot: updated lambda function: %s ") % (function_name)
     monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
     return function_version
 
-def update_lambda_function_code(function_name, handler_filename, folders):
+
+def update_lambda_function_code(function_name, handler_filename, folders, stack_bucket=None):
     install_dependencies_with_pip("requirements.txt", "./vendored")
     client = boto3.client('lambda')
     zipfile = ramuda_utils.make_zip_file_bytes(
         handler=handler_filename, paths=folders)
     local_hash = ramuda_utils.create_sha256(zipfile)
+    #print ("getting remote hash")
     remote_hash = ramuda_utils.get_remote_code_hash(function_name)
     if local_hash == remote_hash:
         print ("Code hasn't changed - won't upload code bundle")
     else:
-        response = client.update_function_code(
-            FunctionName=function_name,
-            ZipFile=zipfile,
-            Publish=True
-        )
-        print ramuda_utils.json2table(response)
+        if not stack_bucket:
+            log.info("no stack bucket found")
+            response = client.update_function_code(
+                FunctionName=function_name,
+                ZipFile=zipfile,
+                Publish=True
+            )
+            print ramuda_utils.json2table(response)
+        else:
+            print "uploading bundle to s3"
+            dest_key, e_tag, version_id = ramuda_utils.s3_upload(stack_bucket, handler_filename, folders, function_name)
+            # print dest_key, e_tag, version_id
+            response = client.update_function_code(
+                FunctionName=function_name,
+                S3Bucket=stack_bucket,
+                S3Key=dest_key,
+                S3ObjectVersion=version_id,
+                Publish=True
+            )
+            print ramuda_utils.json2table(response)
 
 
 def update_lambda_configuration(function_name, role, handler_function, description, timeout, memory, subnet_ids=None,
@@ -366,7 +414,6 @@ def update_lambda_configuration(function_name, role, handler_function, descripti
 def get_metrics(name):
     metrics = ["Duration", "Errors", "Invocations", "Throttles"]
     client = boto3.client("cloudwatch")
-    print name
     for metric in metrics:
         response = client.get_metric_statistics(
             Namespace='AWS/Lambda',
@@ -452,7 +499,7 @@ def wire(function_name, s3_event_sources=None, time_event_sources=None, alias_na
                 rule_name, rule_description, schedule_expression, lambda_arn)
             lambda_add_invoke_permission(
                 function_name, 'events.amazonaws.com', rule_arn)
-    message = ("ramuda bot: wiring lambda function: %s with alias %s") % (function_name,alias_name)
+    message = ("ramuda bot: wiring lambda function: %s with alias %s") % (function_name, alias_name)
     monitoring.slacker_notifcation("systemmessages", message, SLACK_TOKEN)
 
 
@@ -493,8 +540,8 @@ def ping(function_name, alias_name=ALIAS_NAME, version=None):
         )
 
     results = response['Payload'].read()  # payload is a 'StreamingBody'
-    print results
     return results
+
 
 def scaffold():
     # Create project from the cookiecutter-pypackage/ template
@@ -503,9 +550,7 @@ def scaffold():
     cookiecutter(template_path)
 
 
-
 def main():
-
     arguments = docopt(doc)
     # print arguments
     if arguments["list"]:
@@ -525,15 +570,16 @@ def main():
         folders_from_file = conf.get("bundling.folders")
         subnet_ids = conf.get("lambda.vpc.subnetIds", None)
         security_groups = conf.get("lambda.vpc.securityGroups", None)
+        stack_bucket = conf.get("deployment.StackBucket", None)
         deploy_lambda(lambda_name, role_arn, handler_filename, lambda_handler,
                       folders_from_file, lambda_description, timeout, memory_size, subnet_ids=subnet_ids,
-                      security_groups=security_groups)
+                      security_groups=security_groups, stack_bucket=stack_bucket)
     elif arguments["delete"]:
         delete_lambda(arguments["<lambda>"])
     elif arguments["wire"]:
         env = (arguments["--env"] if arguments["--env"] else "DEV")
         conf = config_from_file(env)
-        function_name= conf.get("lambda.name")
+        function_name = conf.get("lambda.name")
         s3_event_sources = conf.get("lambda.events.s3Sources", [])
         time_event_sources = conf.get("lambda.events.timeSchedules", [])
         wire(function_name, s3_event_sources, time_event_sources)
@@ -541,7 +587,7 @@ def main():
         env = (arguments["--env"] if arguments["--env"] else "DEV")
         conf = config_from_file(env)
         s3_event_sources = conf.get("lambda.events.s3Sources")
-        function_name= conf.get("lambda.name")
+        function_name = conf.get("lambda.name")
         unwire(function_name, s3_event_sources)
     elif arguments["bundle"]:
         env = (arguments["--env"] if arguments["--env"] else "DEV")
@@ -550,8 +596,8 @@ def main():
         folders_from_file = conf.get("bundling.folders")
         bundle_lambda(handler_filename, folders_from_file)
     elif arguments["rollback"]:
-        #env = (arguments["--env"] if arguments["--env"] else "DEV")
-        #conf = config_from_file(env)
+        # env = (arguments["--env"] if arguments["--env"] else "DEV")
+        # conf = config_from_file(env)
         if arguments["<version>"]:
             rollback(arguments["<lambda>"], ALIAS_NAME, arguments["<version>"])
         else:
@@ -566,7 +612,6 @@ def main():
         scaffold()
     elif arguments["version"]:
         utils.version()
-
 
 
 if __name__ == "__main__":
