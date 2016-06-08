@@ -10,7 +10,7 @@ import uuid
 import boto3
 from botocore.exceptions import ClientError as ClientError
 import monitoring
-from config_reader import read_lambda_config
+from glomex_utils.config_reader import read_lambda_config
 from docopt import docopt
 import ramuda_utils
 from ramuda_utils import read_ramuda_config
