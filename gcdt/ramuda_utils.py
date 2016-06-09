@@ -8,7 +8,7 @@ import hashlib
 import base64
 from clint.textui import colored
 from pyhocon import config_tree
-from config_reader import get_config_name
+from glomex_utils.config_reader import get_config_name
 import shutil
 import pathspec
 from pyhocon import ConfigFactory
@@ -129,7 +129,7 @@ def json2table(json):
     table = []
     try:
         for k, v in filter(lambda (k, v): k not in filter_terms, json.iteritems()):
-            table.append([k, str(v)])
+            table.append([k, "{}".format(v)])
         return tabulate(table, tablefmt="fancy_grid")
     except Exception as e:
         return json
