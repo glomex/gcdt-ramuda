@@ -148,7 +148,7 @@ def json2table(json):
     table = []
     try:
         for k, v in filter(lambda (k, v): k not in filter_terms, json.iteritems()):
-            table.append([k, str(v)])
+            table.append([k, "{}".format(v)])
         return tabulate(table, tablefmt="fancy_grid")
     except Exception as e:
         return json
