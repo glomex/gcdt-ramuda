@@ -8,7 +8,7 @@ import hashlib
 import base64
 from clint.textui import colored
 from pyhocon import config_tree
-from config_reader import get_config_name
+from glomex_utils.config_reader import get_config_name
 import shutil
 import pathspec
 from pyhocon import ConfigFactory
