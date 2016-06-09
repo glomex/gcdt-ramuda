@@ -283,7 +283,7 @@ def create_lambda(function_name, role, handler_filename, handler_function, folde
 
         )
     else:
-        print "uploading bundle to s3"
+        #print "uploading bundle to s3"
         dest_key, e_tag, version_id = ramuda_utils.s3_upload(stack_bucket, handler_filename, folders, function_name)
         # print dest_key, e_tag, version_id
         response = client.create_function(
@@ -341,7 +341,10 @@ def update_lambda_function_code(function_name, handler_filename, folders, stack_
         handler=handler_filename, paths=folders)
     local_hash = ramuda_utils.create_sha256(zipfile)
     #print ("getting remote hash")
+
+    #print local_hash
     remote_hash = ramuda_utils.get_remote_code_hash(function_name)
+    #print remote_hash
     if local_hash == remote_hash:
         print ("Code hasn't changed - won't upload code bundle")
     else:
@@ -354,7 +357,7 @@ def update_lambda_function_code(function_name, handler_filename, folders, stack_
             )
             print ramuda_utils.json2table(response)
         else:
-            print "uploading bundle to s3"
+            #print "uploading bundle to s3"
             dest_key, e_tag, version_id = ramuda_utils.s3_upload(stack_bucket, handler_filename, folders, function_name)
             # print dest_key, e_tag, version_id
             response = client.update_function_code(

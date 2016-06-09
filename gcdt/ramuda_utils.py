@@ -72,6 +72,7 @@ def make_zip_file_bytes(paths, handler, settings=get_config_name("settings")):
     if buffer_mbytes >=50:
         log.error("Deployment bundles must not be bigger than 50MB")
         log.error("See http://docs.aws.amazon.com/lambda/latest/dg/limits.html")
+        sys.exit(1)
     return buf.getvalue()
 
 
@@ -255,16 +256,16 @@ def s3_upload(deploy_bucket, handler_filename, folders, lambda_name):
 
     source_file_buffer = make_zip_file_bytes(handler=handler_filename, paths=folders)
 
-    checksum = create_sha256(source_file_buffer)
+    #checksum = create_sha256(source_file_buffer)
 
     # ramuda/eu-west-1/function_name/git_hash.zip
-    dest_key = "ramuda/%s/%s/%s-%s.zip" % (region, lambda_name, git_hash, checksum)
+    dest_key = "ramuda/%s/%s/%s.zip" % (region, lambda_name, git_hash)
 
     with open("/tmp/" + git_hash, 'wb') as source_file:
         source_file.write(source_file_buffer)
 
     source_file = "/tmp/" + git_hash
-    print "uploading to S3"
+    #print "uploading to S3"
     start = time.time()
     transfer.upload_file(source_file, bucket, dest_key, callback=ProgressPercentage(source_file))
     end = time.time()
@@ -275,4 +276,5 @@ def s3_upload(deploy_bucket, handler_filename, folders, lambda_name):
     # print "\n"
     # print response["ETag"]
     # print response["VersionId"]
+    print dest_key
     return dest_key, response["ETag"], response["VersionId"]
