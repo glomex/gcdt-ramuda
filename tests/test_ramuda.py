@@ -18,6 +18,9 @@ import random
 import string
 from pyhocon import ConfigFactory
 from logger import log_json, setup_logger
+from gcdt.iam import IAMRoleAndPolicies
+from gcdt.kumo_util import StackLookup
+import json
 
 log = setup_logger(logger_name="RamudaTestCase")
 
@@ -44,6 +47,34 @@ class RamudaTestCase(TestCase):
     temp_string = ''.join([random.choice(string.ascii_lowercase)
                            for n in xrange(6)])
     temporary_function_name = "jenkins_test_" + temp_string
+
+    ###
+
+    def create_role(self, name, policies=None):
+        iam = boto3.client('iam')
+        """ Create a role with an optional inline policy """
+        policydoc = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {"Effect": "Allow", "Principal": {"Service": ["lambda.amazonaws.com"]}, "Action": ["sts:AssumeRole"]},
+            ]
+        }
+        roles = [r['RoleName'] for r in iam.list_roles()['Roles']]
+        if name in roles:
+            print
+            'IAM role %s exists' % (name)
+            role = iam.get_role(RoleName=name)['Role']
+        else:
+            print
+            'Creating IAM role %s' % (name)
+            role = iam.create_role(RoleName=name, AssumeRolePolicyDocument=json.dumps(policydoc))['Role']
+
+        # attach managed policy
+        if policies is not None:
+            for p in policies:
+                iam.attach_role_policy(RoleName=role['RoleName'], PolicyArn=p)
+        return role
+
 
     def setUp(self):
         os.environ["ENV"] = "DEV"
@@ -75,10 +106,13 @@ class RamudaTestCase(TestCase):
 
     def test_create_lambda(self):
         log.info("running test_create_lambda")
+        role = self.create_role(self.temp_string + '_lambda',
+                           policies=['arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole', 'arn:aws:iam::aws:policy/AWSLambdaExecute'])
+
         config_string = """lambda {
                                     name = "dp-dev-sample-lambda-jobr1"
                                     description = "lambda test for ramuda"
-                                    role = "arn:aws:iam::644239850139:role/7f-selfassign/dp-dev-CommonLambdaRole-J0BHM7LHBTG3"
+                                    role = 'unused'
                                     handlerFunction = "handler.handle"
                                     handlerFile = "./resources/sample_lambda/handler.py"
                                     timeout = 300
@@ -125,7 +159,8 @@ class RamudaTestCase(TestCase):
         conf = ConfigFactory.parse_string(config_string)
         lambda_name = self.temporary_function_name
         lambda_description = conf.get("lambda.description")
-        role_arn = conf.get("lambda.role")
+        #print (role)
+        role_arn = role["Arn"]
         lambda_handler = conf.get("lambda.handlerFunction")
         handler_filename = conf.get("lambda.handlerFile")
         timeout = int(conf.get_string("lambda.timeout"))
@@ -135,7 +170,7 @@ class RamudaTestCase(TestCase):
         subnet_ids = conf.get("lambda.vpc.subnetIds", None)
         security_groups = conf.get("lambda.vpc.securityGroups", None)
         region = conf.get("deployment.region")
-        stack_bucket = conf.get("deployment.StackBucket", None)
+        artifact_bucket = conf.get("deployment.artifactBucket", None)
 
         deploy_lambda(function_name=lambda_name,
                       role=role_arn,
@@ -145,12 +180,16 @@ class RamudaTestCase(TestCase):
                       description=lambda_description,
                       timeout=timeout,
                       memory=memory_size,
-                      stack_bucket=stack_bucket)
+                      artifact_bucket=artifact_bucket)
 
         delete_lambda(self.temporary_function_name)
 
     def test_create_lambda_with_s3(self):
             log.info("running test_create_lambda_withs3")
+            role = self.create_role(self.temp_string + '_lambda',
+                                    policies=['arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole',
+                                              'arn:aws:iam::aws:policy/AWSLambdaExecute'])
+
             config_string = """lambda {
                                         name = "dp-dev-sample-lambda-jobr1"
                                         description = "lambda test for ramuda"
@@ -196,14 +235,14 @@ class RamudaTestCase(TestCase):
 
                                     deployment {
                                         region = "eu-west-1"
-                                        StackBucket = "7finity-dp-dev-deployment"
+                                        artifactBucket = "7finity-dp-dev-deployment"
 
                                     }
                                 """
             conf = ConfigFactory.parse_string(config_string)
             lambda_name = self.temporary_function_name
             lambda_description = conf.get("lambda.description")
-            role_arn = conf.get("lambda.role")
+            role_arn = role["Arn"]
             lambda_handler = conf.get("lambda.handlerFunction")
             handler_filename = conf.get("lambda.handlerFile")
             timeout = int(conf.get_string("lambda.timeout"))
@@ -213,7 +252,7 @@ class RamudaTestCase(TestCase):
             subnet_ids = conf.get("lambda.vpc.subnetIds", None)
             security_groups = conf.get("lambda.vpc.securityGroups", None)
             region = conf.get("deployment.region")
-            stack_bucket = conf.get("deployment.StackBucket", None)
+            artifact_bucket = conf.get("deployment.artifactBucket", None)
 
             deploy_lambda(function_name=lambda_name,
                           role=role_arn,
@@ -223,7 +262,7 @@ class RamudaTestCase(TestCase):
                           description=lambda_description,
                           timeout=timeout,
                           memory=memory_size,
-                          stack_bucket=stack_bucket)
+                          artifact_bucket=artifact_bucket)
 
             delete_lambda(self.temporary_function_name)
 

@@ -141,6 +141,7 @@ def list_lambda_versions(function_name):
     response = client.list_versions_by_function(
         FunctionName=function_name,
     )
+    log.debug(response)
     return response
 
 
