@@ -26,19 +26,14 @@ from logger import log_json, setup_logger
 log = setup_logger(logger_name="ramuda_tool")
 from pyspin.spin import make_spin, Default
 
-# TODO
-
-# stdin via clint
-# introduce own config for account detection
-# reupload on requirements.txt changes
-# filter requirements
-# manage log groups
-# silence slacker
-# fill description with git commit, jenkins build or local info
-# wire to specific alias
-# provide -e to deploy
-# wire only local folder
-# retain only n versions
+# TODO stdin via clint
+# TODO introduce own config for account detection
+# TODO reupload on requirements.txt changes
+# TODO manage log groups
+# TODO silence slacker
+# TODO fill description with git commit, jenkins build or local info
+# TODO wire to specific alias
+# TODO retain only n versions
 
 # creating docopt parameters and usage help
 doc = """Usage:
