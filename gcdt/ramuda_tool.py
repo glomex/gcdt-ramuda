@@ -24,7 +24,6 @@ import logging
 from logger import log_json, setup_logger
 
 log = setup_logger(logger_name="ramuda_tool")
-from pyspin.spin import make_spin, Default
 
 # TODO stdin via clint
 # TODO introduce own config for account detection
@@ -584,7 +583,6 @@ def scaffold():
 
 def main():
     arguments = docopt(doc)
-    print arguments
     if arguments["list"]:
         list_functions()
         log.debug("debug_test")
