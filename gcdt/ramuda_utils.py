@@ -7,8 +7,8 @@ from tabulate import tabulate
 import hashlib
 import base64
 from clint.textui import colored
-from pyhocon import config_tree
-from glomex_utils.config_reader import get_config_name
+from pyhocon import config_tree, HOCONConverter
+from glomex_utils.config_reader import read_config
 import shutil
 import pathspec
 from pyhocon import ConfigFactory
@@ -33,7 +33,7 @@ def files_to_zip(path):
             yield full_path, archive_name
 
 
-def make_zip_file_bytes(paths, handler, settings=get_config_name("settings")):
+def make_zip_file_bytes(paths, handler, settings="settings"):
     log.debug("creating zip file...")
     buf = io.BytesIO()
     """
@@ -63,7 +63,8 @@ def make_zip_file_bytes(paths, handler, settings=get_config_name("settings")):
                     archive_target = target + "/" + archive_name
                     # print "archive target " + archive_target
                     z.write(full_path, archive_target)
-            z.write(settings, "settings.conf")
+
+            z.writestr("settings.conf", resolve_stack_lookups(settings))
             z.write(handler, os.path.basename(handler))
     # print z.printdir()
 
@@ -74,6 +75,11 @@ def make_zip_file_bytes(paths, handler, settings=get_config_name("settings")):
         log.error("See http://docs.aws.amazon.com/lambda/latest/dg/limits.html")
         sys.exit(1)
     return buf.getvalue()
+
+
+def resolve_stack_lookups(settings):
+    config = read_config(settings, resolve_stack_only=True)
+    return HOCONConverter.convert(config, 'hocon')
 
 
 def are_credentials_still_valid():
