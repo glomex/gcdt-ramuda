@@ -1,7 +1,7 @@
 import sys
 import boto3
 import io
-from zipfile import ZipFile
+from zipfile import ZipFile, ZipInfo
 import os
 from tabulate import tabulate
 import hashlib
@@ -64,7 +64,10 @@ def make_zip_file_bytes(paths, handler, settings="settings"):
                     # print "archive target " + archive_target
                     z.write(full_path, archive_target)
 
-            z.writestr("settings.conf", resolve_stack_lookups(settings))
+            # give settings.conf -rwxr--r-- permissions
+            settings_file = ZipInfo("settings.conf")
+            settings_file.external_attr = 0644 << 16L
+            z.writestr(settings_file, resolve_stack_lookups(settings))
             z.write(handler, os.path.basename(handler))
     # print z.printdir()
 
