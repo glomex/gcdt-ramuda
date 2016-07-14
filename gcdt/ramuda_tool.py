@@ -200,12 +200,13 @@ def install_dependencies_with_pip(requirements_file, destination_folder):
 
     try:
         result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        return result
     except subprocess.CalledProcessError as e:
         sys.stderr.write(
             "\033[01;31mError running command: {} resulted in the following error: \033[01;32m {}".format(e.cmd,
                                                                                                           e.output))
+        sys.exit(1)
 
-    return result
 
 
 def list_functions():
