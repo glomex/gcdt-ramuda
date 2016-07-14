@@ -1,14 +1,14 @@
 import sys
 import boto3
 import io
-from zipfile import ZipFile
+from zipfile import ZipFile, ZipInfo
 import os
 from tabulate import tabulate
 import hashlib
 import base64
 from clint.textui import colored
-from pyhocon import config_tree
-from glomex_utils.config_reader import get_config_name
+from pyhocon import config_tree, HOCONConverter
+from glomex_utils.config_reader import read_config
 import shutil
 import pathspec
 from pyhocon import ConfigFactory
@@ -33,7 +33,7 @@ def files_to_zip(path):
             yield full_path, archive_name
 
 
-def make_zip_file_bytes(paths, handler, settings=get_config_name("settings")):
+def make_zip_file_bytes(paths, handler, settings="settings"):
     log.debug("creating zip file...")
     buf = io.BytesIO()
     """
@@ -63,7 +63,13 @@ def make_zip_file_bytes(paths, handler, settings=get_config_name("settings")):
                     archive_target = target + "/" + archive_name
                     # print "archive target " + archive_target
                     z.write(full_path, archive_target)
-            z.write(settings, "settings.conf")
+
+            # give settings.conf -rw-r--r-- permissions
+            settings_file = ZipInfo("settings.conf")
+            settings_file.external_attr = 0644 << 16L
+            z.writestr(settings_file, read_config(config_base_name="settings",
+                                                  lookups=["stack"],
+                                                  output_format="hocon"))
             z.write(handler, os.path.basename(handler))
     # print z.printdir()
 
