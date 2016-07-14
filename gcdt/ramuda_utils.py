@@ -64,10 +64,12 @@ def make_zip_file_bytes(paths, handler, settings="settings"):
                     # print "archive target " + archive_target
                     z.write(full_path, archive_target)
 
-            # give settings.conf -rwxr--r-- permissions
+            # give settings.conf -rw-r--r-- permissions
             settings_file = ZipInfo("settings.conf")
             settings_file.external_attr = 0644 << 16L
-            z.writestr(settings_file, resolve_stack_lookups(settings))
+            z.writestr(settings_file, read_config(config_base_name="settings",
+                                                  lookups=["stack"],
+                                                  output_format="hocon"))
             z.write(handler, os.path.basename(handler))
     # print z.printdir()
 
@@ -78,11 +80,6 @@ def make_zip_file_bytes(paths, handler, settings="settings"):
         log.error("See http://docs.aws.amazon.com/lambda/latest/dg/limits.html")
         sys.exit(1)
     return buf.getvalue()
-
-
-def resolve_stack_lookups(settings):
-    config = read_config(settings, resolve_stack_only=True)
-    return HOCONConverter.convert(config, 'hocon')
 
 
 def are_credentials_still_valid():
