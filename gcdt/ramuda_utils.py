@@ -13,7 +13,8 @@ import shutil
 import pathspec
 from pyhocon import ConfigFactory
 import utils
-from s3transfer import S3Transfer
+#from s3transfer import S3Transfer
+from boto3.s3.transfer import S3Transfer
 import time
 import warnings
 import threading

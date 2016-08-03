@@ -628,8 +628,8 @@ def main():
             ping(arguments["<lambda>"], version=arguments["<version>"])
         else:
             ping(arguments["<lambda>"])
-    elif arguments["scaffold"]:
-        scaffold()
+    #elif arguments["scaffold"]:
+    #    scaffold()
     elif arguments["version"]:
         utils.version()
 
