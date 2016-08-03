@@ -46,7 +46,6 @@ doc = """Usage:
         ramuda rollback  <lambda> [<version>]
         ramuda ping <lambda> [<version>]
         ramuda configure
-        ramuda scaffold [<lambdaname>]
         ramuda version
 
 Options:
@@ -573,13 +572,6 @@ def ping(function_name, alias_name=ALIAS_NAME, version=None):
 
     results = response['Payload'].read()  # payload is a 'StreamingBody'
     return results
-
-
-def scaffold():
-    # Create project from the cookiecutter-pypackage/ template
-    template_path = os.path.join(
-        os.path.dirname(__file__), 'cookiecutter-ramuda')
-    cookiecutter(template_path)
 
 
 def main():
