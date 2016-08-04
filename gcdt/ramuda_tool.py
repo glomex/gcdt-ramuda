@@ -12,14 +12,14 @@ from botocore.exceptions import ClientError as ClientError
 import monitoring
 from glomex_utils.config_reader import read_lambda_config
 from docopt import docopt
-import ramuda_utils
-from ramuda_utils import read_ramuda_config
+from gcdt import ramuda_utils
+from gcdt.ramuda_utils import read_ramuda_config
 from datetime import datetime, timedelta
 from clint.textui import colored
 import sys
-from cookiecutter.main import cookiecutter
+#from cookiecutter.main import cookiecutter
 import utils
-import logging
+#import logging
 
 from logger import log_json, setup_logger
 
