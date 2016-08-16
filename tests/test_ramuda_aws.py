@@ -69,7 +69,7 @@ def _create_role(name, policies=None):
     # calling the CreateFunction operation: The role defined for the function
     # cannot be assumed by Lambda.
     # current assumption is that the role is not propagated to lambda
-    time.sleep(5)
+    time.sleep(10)
 
     return role
 
