@@ -3,6 +3,7 @@ import os
 import json
 import random
 import string
+import time
 import boto3
 import textwrap
 from pyhocon import ConfigFactory
@@ -32,7 +33,7 @@ def get_size(start_path='.'):
 def _create_role(name, policies=None):
     """ Create a role with an optional inline policy """
     iam = boto3.client('iam')
-    policydoc = {
+    policy_doc = {
         'Version': '2012-10-17',
         'Statement': [
             {
@@ -50,13 +51,26 @@ def _create_role(name, policies=None):
         print('Creating IAM role %s' % name)
         role = iam.create_role(
             RoleName=name,
-            AssumeRolePolicyDocument=json.dumps(policydoc)
+            AssumeRolePolicyDocument=json.dumps(policy_doc)
         )['Role']
 
     # attach managed policy
     if policies is not None:
         for p in policies:
             iam.attach_role_policy(RoleName=role['RoleName'], PolicyArn=p)
+
+    # TODO: on 20160816 we had multiple times that the role can not be assigned
+    # we suspect that this is a timing issue with AWS lambda
+    # get_role to make sure role is available for lambda
+    # response = iam.list_attached_role_policies(RoleName=name)
+    # log.info('created role: %s' % name)
+    # log.info(response)
+    # ClientError: An error occurred (InvalidParameterValueException) when
+    # calling the CreateFunction operation: The role defined for the function
+    # cannot be assumed by Lambda.
+    # current assumption is that the role is not propagated to lambda
+    time.sleep(5)
+
     return role
 
 
@@ -288,8 +302,6 @@ def test_update_lambda(cwd, temp_files):
     )
 
     lambda_description = 'lambda created for unittesting ramuda deployment'
-    # TODO: on 20160816 we had multiple times that the role can not be assigned
-    # we suspect that this is a timing issue with AWS lambda
     # role_arn = 'arn:aws:iam::188084614522:role/unittest_winluj_lambda'
     role_arn = role['Arn']
     lambda_handler = 'handler.handle'
