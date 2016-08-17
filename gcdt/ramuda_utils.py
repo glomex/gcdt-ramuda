@@ -1,28 +1,27 @@
+# -*- coding: utf-8 -*-
 from __future__ import print_function
-import sys
-import boto3
-import io
-from functools import wraps
-from zipfile import ZipFile, ZipInfo
 import os
-from tabulate import tabulate
-import hashlib
-import base64
-from clint.textui import colored
-from pyhocon import config_tree
-from glomex_utils.config_reader import read_config
+import sys
+import io
 import shutil
+from functools import wraps
 import pathspec
-from pyhocon import ConfigFactory
-from boto3.s3.transfer import S3Transfer
+from zipfile import ZipFile, ZipInfo
 import time
 import warnings
 import threading
+import hashlib
+import base64
+import boto3
+from boto3.s3.transfer import S3Transfer
+from clint.textui import colored
+from tabulate import tabulate
+from pyhocon import ConfigFactory, config_tree
+from glomex_utils.config_reader import read_config
 from gcdt.logger import setup_logger
 from gcdt import utils
 
 log = setup_logger(logger_name='ramuda_utils')
-boto_session = boto3.session.Session()
 
 
 def files_to_zip(path):
@@ -150,6 +149,7 @@ def lambda_exists(lambda_name):
 
 
 def unit(name):
+    # used in get_metrics
     if name is 'Duration':
         return 'Milliseconds'
     else:
@@ -157,13 +157,15 @@ def unit(name):
 
 
 def aggregate_datapoints(datapoints):
-    sum = 0.0
+    # used in ramuda_core.get_metrics
+    # this does not round, it truncates!
+    result = 0.0
     for dp in datapoints:
-        sum += dp['Sum']
-    return int(sum)
+        result += dp['Sum']
+    return int(result)
 
 
-def list_lambda_versions(function_name):
+def list_lambda_versions(function_name):  # this is not used!!
     client = boto3.client('lambda')
     """response = client.get_alias(
         FunctionName=function_name,
@@ -179,6 +181,12 @@ def list_lambda_versions(function_name):
 
 
 def json2table(json):
+    """This does format a dictionary into a table.
+    Note this expects a dictionary (not a json string!)
+
+    :param json:
+    :return:
+    """
     filter_terms = ['ResponseMetadata']
     table = []
     try:
@@ -187,6 +195,7 @@ def json2table(json):
             table.append([k, str(v)])
         return tabulate(table, tablefmt='fancy_grid')
     except Exception as e:
+        print(e)
         return json
 
 
@@ -230,17 +239,17 @@ def cleanup_folder(path, ramuda_ignore_file=None):
         split_dir = package.split('/')[0]
         result_set.add(split_dir)
         # print ('added %s to result set' % split_dir)
-    for dir in result_set:
-        object = path + '/' + dir
-        if os.path.isdir(object):
-            print('deleting directory %s' % object)
-            shutil.rmtree(path + '/' + dir, ignore_errors=False)
+    for folder in result_set:
+        obj = path + '/' + folder
+        if os.path.isdir(obj):
+            print('deleting directory %s' % obj)
+            shutil.rmtree(path + '/' + folder, ignore_errors=False)
         else:
             # print ('deleting file %s') % object
-            os.remove(path + '/' + dir)
+            os.remove(path + '/' + folder)
 
 
-def read_ramuda_config(config_file=None):
+def read_ramuda_config(config_file=None):  # TODO: turn this into .gcdt config
     """Read .kumo config file from user home.
 
     :return: pyhocon configuration, exit_code
@@ -259,17 +268,20 @@ def read_ramuda_config(config_file=None):
 
 
 class ProgressPercentage(object):
-    def __init__(self, filename):
+    def __init__(self, filename, out=sys.stdout):
         self._filename = filename
         self._size = float(os.path.getsize(filename))
         self._seen_so_far = 0
         self._lock = threading.Lock()
         self._time = time.time()
         self._time_max = 360
+        self._out = out
 
     def __call__(self, bytes_amount):
         # To simplify we'll assume this is hooked up
         # to a single filename.
+        # FIXME: ZeroDivisionError: float division by zero
+        # in case of empty file (_size == 0)
         with self._lock:
             self._seen_so_far += bytes_amount
 
@@ -280,26 +292,25 @@ class ProgressPercentage(object):
             if (self._size / bytes_per_second > time_left) and time_left < 330:
                 print('bad connection')
                 raise Exception
-            sys.stdout.write(' elapsed time %ss, time left %ss, bps %s' %
-                             (str(int(elapsed_time)), str(int(time_left)),
-                              str(int(bytes_per_second))))
-            sys.stdout.flush()
-            sys.stdout.write(
+            self._out.write(' elapsed time %ds, time left %ds, bps %d' %
+                            (int(elapsed_time), int(time_left),
+                             int(bytes_per_second)))
+            self._out.flush()
+            self._out.write(
                 '\r%s  %s / %s  (%.2f%%)' % (
                     self._filename, self._seen_so_far, self._size,
                     percentage))
-            sys.stdout.flush()
+            self._out.flush()
 
 
 @utils.retries(3)
 def s3_upload(deploy_bucket, zipfile, lambda_name):
+    boto_session = boto3.session.Session()
     region = boto_session.region_name
-    resource_s3 = boto_session.resource('s3')
-    client = boto3.client('s3')
+    client = boto_session.client('s3')
     transfer = S3Transfer(client)
     bucket = deploy_bucket
     git_hash = utils.get_git_revision_short_hash()
-    checksum = create_sha256(zipfile)
 
     # ramuda/eu-west-1/function_name/git_hash.zip
     dest_key = 'ramuda/%s/%s/%s.zip' % (region, lambda_name, git_hash)
@@ -309,10 +320,10 @@ def s3_upload(deploy_bucket, zipfile, lambda_name):
 
     source_file = '/tmp/' + git_hash
     # print 'uploading to S3'
-    start = time.time()
+    # start = time.time()
     transfer.upload_file(source_file, bucket, dest_key,
                          callback=ProgressPercentage(source_file))
-    end = time.time()
+    # end = time.time()
     # print 'uploading took:'
     # print(end - start)
 

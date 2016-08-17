@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """ramuda.
 Script to deploy Lambda functions to AWS
 """
@@ -7,7 +9,6 @@ import sys
 import subprocess
 import uuid
 from datetime import datetime, timedelta
-import logging
 import boto3
 from botocore.exceptions import ClientError as ClientError
 from clint.textui import colored
@@ -18,7 +19,6 @@ from gcdt.ramuda_utils import make_zip_file_bytes, json2table, s3_upload, \
 from gcdt.logger import setup_logger
 
 log = setup_logger(logger_name='ramuda_tool')
-#log.setLevel(logging.DEBUG)
 ALIAS_NAME = 'ACTIVE'
 
 
@@ -351,12 +351,12 @@ def bundle_lambda(handler_filename, folders):
     exit_code = _install_dependencies_with_pip('requirements.txt', './vendored')
     if exit_code:
         return 1
-    zip = make_zip_file_bytes(
+    zip_bytes = make_zip_file_bytes(
         handler=handler_filename, paths=folders)
-    if check_buffer_exceeds_limit(zip):
+    if check_buffer_exceeds_limit(zip_bytes):
         return 1
     with open('bundle.zip', 'wb') as zfile:
-        zfile.write(zip)
+        zfile.write(zip_bytes)
     print('Finished - a bundle.zip is waiting for you...')
     return 0
 

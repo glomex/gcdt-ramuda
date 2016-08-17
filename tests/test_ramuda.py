@@ -1,15 +1,23 @@
+# -*- coding: utf-8 -*-
 from __future__ import print_function
 import os
 import logging
-from tempfile import mkdtemp
+import shutil
+from StringIO import StringIO
+from tempfile import mkdtemp, NamedTemporaryFile
 import textwrap
+import json
+import time
+from s3transfer.subscribers import BaseSubscriber
 from nose.tools import assert_true, assert_false, assert_not_in, assert_in, \
-    assert_equal
+    assert_equal, assert_regexp_matches
 import nose
+from nose.plugins.attrib import attr
 from testfixtures import LogCapture
-from helpers import with_setup_args, create_tempfile, get_size
+from .helpers import with_setup_args, create_tempfile, get_size
 from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda
-from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder
+from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
+    aggregate_datapoints, json2table, create_sha256, ProgressPercentage
 from gcdt.logger import setup_logger
 
 log = setup_logger(logger_name='RamudaTestCase')
@@ -24,19 +32,18 @@ def _setup():
     test_folder = mkdtemp()
     os.chdir(test_folder)
     temp_files = []
-    # create settings_dev.conf
-    # prepare dummy template for test
     return {'cwd': cwd, 'test_folder': test_folder, 'temp_files': temp_files}
 
 
 def _teardown(cwd, test_folder, temp_files):
     # rm temporary folder
     os.chdir(cwd)
-    #shutil.rmtree(test_folder)
+    shutil.rmtree(test_folder)
     for t in temp_files:
         os.unlink(t)
 
 
+@attr('slow')
 @with_setup_args(_setup, _teardown)
 def test_get_packages_to_ignore(cwd, test_folder, temp_files):
     requirements_txt = create_tempfile('boto3\npyhocon\n')
@@ -68,6 +75,7 @@ def test_get_packages_to_ignore(cwd, test_folder, temp_files):
     return {'temp_files': temp_files}
 
 
+@attr('slow')
 @with_setup_args(_setup, _teardown)
 def test_cleanup_folder(cwd, test_folder, temp_files):
     requirements_txt = create_tempfile('boto3\npyhocon\n')
@@ -95,6 +103,7 @@ def test_cleanup_folder(cwd, test_folder, temp_files):
     return {'temp_files': temp_files}
 
 
+@attr('slow')
 @with_setup_args(_setup, _teardown)
 def test_install_dependencies_with_pip(cwd, test_folder, temp_files):
     requirements_txt = create_tempfile('werkzeug\n')
@@ -132,6 +141,7 @@ def test_bundle_lambda(cwd, test_folder, temp_files):
     assert_equal(exit_code, 0)
 
 
+@attr('slow')
 @with_setup_args(_setup, _teardown)
 def test_bundle_lambda_exceeds_limit(cwd, test_folder, temp_files):
     folders_from_file = [
@@ -150,7 +160,6 @@ def test_bundle_lambda_exceeds_limit(cwd, test_folder, temp_files):
     # write 51MB file -> this gets us a zip file that exceeds the 50MB limit
     with open('./impl/bigfile', 'wb') as bigfile:
         print(bigfile.name)
-        #bigfile.write(os.urandom(510000000))
         bigfile.write(os.urandom(51100000))  # 51 MB
 
     # capture ERROR logging:
@@ -164,3 +173,81 @@ def test_bundle_lambda_exceeds_limit(cwd, test_folder, temp_files):
         )
 
     assert_equal(exit_code, 1)
+
+
+def test_unit():
+    assert_equal(unit('Duration'), 'Milliseconds')
+    assert_equal(unit('Else'), 'Count')
+
+
+def test_aggregate_datapoints():
+    assert_equal(aggregate_datapoints(
+        [{'Sum': 0.1}, {'Sum': 0.1}, {'Sum': 0.1}, {'Sum': 0.1}, {'Sum': 0.1},
+         {'Sum': 0.1}]), 0)
+    assert_equal(aggregate_datapoints(
+        [{'Sum': 1.1}, {'Sum': 1.1}, {'Sum': 1.1}, {'Sum': 1.1}]), 4)
+
+
+def test_json2table():
+    data = {
+        'sth': 'here',
+        'number': 1.1,
+        'ResponseMetadata': 'bla'
+    }
+    expected = u'\u2552\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2564\u2550\u2550\u2550\u2550\u2550\u2550\u2555\n\u2502 sth    \u2502 here \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502 number \u2502 1.1  \u2502\n\u2558\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2567\u2550\u2550\u2550\u2550\u2550\u2550\u255b'
+    actual = json2table(data)
+    assert_equal(actual, expected)
+
+
+def test_json2table_exception():
+    data = json.dumps({
+        'sth': 'here',
+        'number': 1.1,
+        'ResponseMetadata': 'bla'
+    })
+    actual = json2table(data)
+    assert_equal(actual, data)
+
+
+def test_create_sha256():
+    actual = create_sha256('Meine Oma fährt im Hühnerstall Motorrad')
+    expected = 'SM6siXnsKAmQuG5egM0MYKgUU60nLFxUVeEvTcN4OFI='
+    assert_equal(actual, expected)
+
+
+def test_progress_percentage():
+    class ProgressCallbackInvoker(BaseSubscriber):
+        """A back-compat wrapper to invoke a provided callback via a subscriber
+
+        :param callback: A callable that takes a single positional argument for
+            how many bytes were transferred.
+        """
+        def __init__(self, callback):
+            self._callback = callback
+
+        def on_progress(self, bytes_transferred, **kwargs):
+            self._callback(bytes_transferred)
+
+    # create dummy file
+    tf = NamedTemporaryFile(delete=False, suffix='.tgz')
+    open(tf.name, 'w').write('some content here...')
+    out = StringIO()
+    # instantiate ProgressReporter
+    callback = ProgressPercentage(tf.name, out=out)
+    subscriber = ProgressCallbackInvoker(callback)
+    # 1 byte -> 5%
+    time.sleep(0.001)
+    subscriber.on_progress(bytes_transferred=1)
+    assert_regexp_matches(out.getvalue().strip(),
+                          '.*\.tgz  1 / 20\.0  \(5\.00%\)')
+    # 11 (1+10) byte -> 55%
+    subscriber.on_progress(bytes_transferred=10)
+    assert_regexp_matches(out.getvalue().strip(),
+                          '.*\.tgz  11 / 20\.0  \(55\.00%\)')
+
+    # cleanup the testfile
+    tf.close()
+    os.unlink(tf.name)
+
+
+#@attr('this')

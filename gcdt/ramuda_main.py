@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 """ramuda.
 Script to deploy Lambda functions to AWS
@@ -61,6 +62,7 @@ def read_ramuda_config():
 
 
 def main():
+    exit_code = 0
     are_credentials_still_valid()
     slack_token = read_ramuda_config().get('ramuda.slack-token')
     arguments = docopt(DOC)
@@ -88,8 +90,7 @@ def main():
                                   lambda_description, timeout,
                                   memory_size, subnet_ids=subnet_ids,
                                   security_groups=security_groups,
-                                  artifact_bucket=artifact_bucket,
-                                  slack_token=slack_token)
+                                  artifact_bucket=artifact_bucket)
     elif arguments['delete']:
         exit_code = delete_lambda(arguments['<lambda>'],
                                   slack_token=slack_token)
