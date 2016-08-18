@@ -1,298 +1,253 @@
+# -*- coding: utf-8 -*-
 from __future__ import print_function
-import sys
-
-# sys.path.append("../gcdt/")
-
-from unittest import TestCase, main
-# import unittest
-# import io
-# import os
-# from zipfile import ZipFile
-from gcdt.ramuda_tool import install_dependencies_with_pip, delete_lambda, deploy_lambda
-# from gcdt.ramuda_tool import update_lambda_function_code, get_metrics, create_lambda,\
-# deploy_alias, update_lambda, rollback
-
-from gcdt.ramuda_utils import are_credentials_still_valid, lambda_exists, get_packages_to_ignore, cleanup_folder
-import boto3
-# from pyspin.spin import make_spin, Default
+import os
+import logging
 import shutil
-import random
-import string
-from pyhocon import ConfigFactory
-from gcdt.logger import log_json, setup_logger
-# from gcdt.iam import IAMRoleAndPolicies
-# from gcdt.kumo_util import StackLookup
+from StringIO import StringIO
+from tempfile import mkdtemp, NamedTemporaryFile
+import textwrap
 import json
+import time
+from s3transfer.subscribers import BaseSubscriber
+from nose.tools import assert_true, assert_false, assert_not_in, assert_in, \
+    assert_equal, assert_regexp_matches
+import nose
+from nose.plugins.attrib import attr
+from testfixtures import LogCapture
+from .helpers import with_setup_args, create_tempfile, get_size
+from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda
+from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
+    aggregate_datapoints, json2table, create_sha256, ProgressPercentage
+from gcdt.logger import setup_logger
 
 log = setup_logger(logger_name='RamudaTestCase')
 
-import os
+
+def here(p): return os.path.join(os.path.dirname(__file__), p)
 
 
-def get_size(start_path='.'):
-    total_size = 0
-    for dirpath, dirnames, filenames in os.walk(start_path):
-        for f in filenames:
-            fp = os.path.join(dirpath, f)
-            total_size += os.path.getsize(fp)
-    return total_size
+def _setup():
+    # setup a temporary folder
+    cwd = os.getcwd()
+    test_folder = mkdtemp()
+    os.chdir(test_folder)
+    temp_files = []
+    return {'cwd': cwd, 'test_folder': test_folder, 'temp_files': temp_files}
 
 
-# TODO
-# setup random function name
-# tear down function
-# testspinner
-# rename to test_butaris
+def _teardown(cwd, test_folder, temp_files):
+    # rm temporary folder
+    os.chdir(cwd)
+    shutil.rmtree(test_folder)
+    for t in temp_files:
+        os.unlink(t)
 
 
-# FIXME: fix existing ramuda tests and increase test coverage
-'''
-class RamudaTestCase(TestCase):
-    temp_string = ''.join([random.choice(string.ascii_lowercase)
-                           for n in xrange(6)])
-    temporary_function_name = 'jenkins_test_' + temp_string
+@attr('slow')
+@with_setup_args(_setup, _teardown)
+def test_get_packages_to_ignore(cwd, test_folder, temp_files):
+    requirements_txt = create_tempfile('boto3\npyhocon\n')
+    # typical .ramudaignore file:
+    ramuda_ignore = create_tempfile(textwrap.dedent("""\
+        boto3*
+        botocore*
+        python-dateutil*
+        six*
+        docutils*
+        jmespath*
+        futures*
+    """))
+    # schedule the temp_files for cleanup:
+    temp_files.extend([requirements_txt, ramuda_ignore])
+    _install_dependencies_with_pip(requirements_txt, test_folder)
 
-    ###
+    packages = os.listdir(test_folder)
+    log.info('packages in test folder:')
+    for package in packages:
+        log.debug(package)
 
-    def create_role(self, name, policies=None):
-        iam = boto3.client('iam')
-        """ Create a role with an optional inline policy """
-        policydoc = {
-            'Version': '2012-10-17',
-            'Statement': [
-                {'Effect': 'Allow', 'Principal': {'Service': ['lambda.amazonaws.com']},
-                 'Action': ['sts:AssumeRole']},
-            ]
-        }
-        roles = [r['RoleName'] for r in iam.list_roles()['Roles']]
-        if name in roles:
-            print('IAM role %s exists' % name)
-            role = iam.get_role(RoleName=name)['Role']
-        else:
-            print('Creating IAM role %s' % name)
-            role = iam.create_role(RoleName=name, AssumeRolePolicyDocument=json.dumps(policydoc))['Role']
-
-        # attach managed policy
-        if policies is not None:
-            for p in policies:
-                iam.attach_role_policy(RoleName=role['RoleName'], PolicyArn=p)
-        return role
-
-    def setUp(self):
-        os.environ['ENV'] = 'DEV'
-        shutil.rmtree(os.getcwdu() + '/resources/vendored', ignore_errors=True)
-        shutil.rmtree(os.getcwdu() + '/vendored', ignore_errors=True)
-        os.mkdir(os.getcwdu() + '/resources/vendored')
-        log.info(self.temporary_function_name)
-        with open('settings_dev.conf', 'w') as settings:
-            setting_string = """sample_lambda {
-                            cw_name = "dp-dev-sample"
-                            }"""
-            settings.write(setting_string)
-        os.mkdir(os.getcwdu() + '/vendored')
-
-    def tearDown(self):
-        shutil.rmtree(os.getcwdu() + '/resources/vendored')
-        shutil.rmtree(os.getcwdu() + '/vendored')
-        os.remove('settings_dev.conf')
-
-    def test_install_dependencies_with_pip(self):
-        log.info(install_dependencies_with_pip(os.getcwdu() + '/resources/requirements.txt',
-                                               os.getcwdu() + '/resources/vendored'))
-        packages = os.listdir(os.getcwdu() + '/resources/vendored')
-        for package in packages:
-            log.debug(package)
-        self.assertTrue('werkzeug' in packages)
-        self.assertTrue('troposphere' in packages)
-        self.assertTrue('boto3' in packages)
-
-    def test_create_lambda(self):
-        log.info('running test_create_lambda')
-        role = self.create_role(self.temp_string + '_lambda',
-                                policies=['arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole',
-                                          'arn:aws:iam::aws:policy/AWSLambdaExecute'])
-
-        config_string = """lambda {
-                                    name = "dp-dev-sample-lambda-jobr1"
-                                    description = "lambda test for ramuda"
-                                    role = 'unused'
-                                    handlerFunction = "handler.handle"
-                                    handlerFile = "./resources/sample_lambda/handler.py"
-                                    timeout = 300
-                                    memorySize = 256
-
-                                    events {
-                                    s3Sources = [
-                                        { bucket = "jobr-test", type = "s3:ObjectCreated:*" , suffix=".gz"}
-                                    ]
-                                    timeSchedules = [
-                                       {
-                                           ruleName = "dp-dev-sample-lambda-jobr-T1",
-                                           ruleDescription = "run every 5 min from 0-5",
-                                           scheduleExpression = "cron(0/5 0-5 ? * * *)"
-                                       },
-                                       {
-                                           ruleName = "dp-dev-sample-lambda-jobr-T2",
-                                           ruleDescription = "run every 5 min from 8-23:59",
-                                           scheduleExpression = "cron(0/5 8-23:59 ? * * *)"
-                                       }
-                                   ]
-                                  }
+    matches = get_packages_to_ignore(test_folder, ramuda_ignore)
+    log.info('matches in test folder:')
+    for match in sorted(matches):
+        log.debug(match)
+    assert_true('boto3/__init__.py' in matches)
+    assert_false('pyhocon' in matches)
+    return {'temp_files': temp_files}
 
 
-                                    vpc  {
-                                      subnetIds = ["subnet-87685dde", "subnet-9f39ccfb", "subnet-166d7061"]
-                                      securityGroups = ["sg-ae6850ca"]
-                                    }
+@attr('slow')
+@with_setup_args(_setup, _teardown)
+def test_cleanup_folder(cwd, test_folder, temp_files):
+    requirements_txt = create_tempfile('boto3\npyhocon\n')
+    # typical .ramudaignore file:
+    ramuda_ignore = create_tempfile(textwrap.dedent("""\
+        boto3*
+        botocore*
+        python-dateutil*
+        six*
+        docutils*
+        jmespath*
+        futures*
+    """))
+    temp_files.extend([requirements_txt, ramuda_ignore])
+    log.info(_install_dependencies_with_pip(
+        here('resources/sample_lambda/requirements.txt'), test_folder))
 
-                                }
-
-                                bundling {
-                                    zip = "bundle.zip"
-                                    folders = [
-                                        { source = "./vendored", target = "." },
-                                        { source = "./impl", target = "impl" }
-                                    ]
-                                }
-
-                                deployment {
-                                    region = "eu-west-1"
-                                }
-                            """
-        conf = ConfigFactory.parse_string(config_string)
-        lambda_name = self.temporary_function_name
-        lambda_description = conf.get('lambda.description')
-        # print (role)
-        role_arn = role['Arn']
-        lambda_handler = conf.get('lambda.handlerFunction')
-        handler_filename = conf.get('lambda.handlerFile')
-        timeout = int(conf.get_string('lambda.timeout'))
-        memory_size = int(conf.get_string('lambda.memorySize'))
-        zip_name = conf.get('bundling.zip')
-        folders_from_file = conf.get('bundling.folders')
-        subnet_ids = conf.get('lambda.vpc.subnetIds', None)
-        security_groups = conf.get('lambda.vpc.securityGroups', None)
-        region = conf.get('deployment.region')
-        artifact_bucket = conf.get('deployment.artifactBucket', None)
-
-        deploy_lambda(function_name=lambda_name,
-                      role=role_arn,
-                      handler_filename=handler_filename,
-                      handler_function=lambda_handler,
-                      folders=folders_from_file,
-                      description=lambda_description,
-                      timeout=timeout,
-                      memory=memory_size,
-                      artifact_bucket=artifact_bucket)
-
-        delete_lambda(self.temporary_function_name)
-
-    def test_create_lambda_with_s3(self):
-        log.info('running test_create_lambda_withs3')
-        role = self.create_role(self.temp_string + '_lambda',
-                                policies=['arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole',
-                                          'arn:aws:iam::aws:policy/AWSLambdaExecute'])
-
-        config_string = """lambda {
-                                        name = "dp-dev-sample-lambda-jobr1"
-                                        description = "lambda test for ramuda"
-                                        role = "arn:aws:iam::644239850139:role/7f-selfassign/dp-dev-CommonLambdaRole-J0BHM7LHBTG3"
-                                        handlerFunction = "handler.handle"
-                                        handlerFile = "./resources/sample_lambda/handler.py"
-                                        timeout = 300
-                                        memorySize = 256
-
-                                        events {
-                                        s3Sources = [
-                                            { bucket = "jobr-test", type = "s3:ObjectCreated:*" , suffix=".gz"}
-                                        ]
-                                        timeSchedules = [
-                                           {
-                                               ruleName = "dp-dev-sample-lambda-jobr-T1",
-                                               ruleDescription = "run every 5 min from 0-5",
-                                               scheduleExpression = "cron(0/5 0-5 ? * * *)"
-                                           },
-                                           {
-                                               ruleName = "dp-dev-sample-lambda-jobr-T2",
-                                               ruleDescription = "run every 5 min from 8-23:59",
-                                               scheduleExpression = "cron(0/5 8-23:59 ? * * *)"
-                                           }
-                                       ]
-                                      }
+    log.info(get_size(test_folder))
+    cleanup_folder(test_folder, ramuda_ignore)
+    log.info(get_size(test_folder))
+    packages = os.listdir(test_folder)
+    log.debug(packages)
+    assert_not_in('boto3', packages)
+    assert_in('pyhocon', packages)
+    return {'temp_files': temp_files}
 
 
-                                        vpc  {
-                                          subnetIds = ["subnet-87685dde", "subnet-9f39ccfb", "subnet-166d7061"]
-                                          securityGroups = ["sg-ae6850ca"]
-                                        }
+@attr('slow')
+@with_setup_args(_setup, _teardown)
+def test_install_dependencies_with_pip(cwd, test_folder, temp_files):
+    requirements_txt = create_tempfile('werkzeug\n')
+    temp_files.append(requirements_txt)
+    log.info(_install_dependencies_with_pip(
+        requirements_txt,
+        test_folder))
+    packages = os.listdir(test_folder)
+    for package in packages:
+        log.debug(package)
+    assert_true('werkzeug' in packages)
+    return {'temp_files': temp_files}
 
-                                    }
 
-                                    bundling {
-                                        zip = "bundle.zip"
-                                        folders = [
-                                            { source = "./vendored", target = "." },
-                                            { source = "./impl", target = "impl" }
-                                        ]
-                                    }
+@with_setup_args(_setup, _teardown)
+def test_bundle_lambda(cwd, test_folder, temp_files):
+    folders_from_file = [
+        {'source': './vendored', 'target': '.'},
+        {'source': './impl', 'target': 'impl'}
+    ]
+    os.environ['ENV'] = 'DEV'
+    os.mkdir('./vendored')
+    os.mkdir('./impl')
+    with open('./requirements.txt', 'w') as req:
+        req.write('pyhocon\n')
+    with open('./handler.py', 'w') as req:
+        req.write('# this is my lambda handler\n')
+    with open('./settings_dev.conf', 'w') as req:
+        req.write('\n')
+    # write 1MB file -> this gets us a zip file that is within the 50MB limit
+    with open('./impl/bigfile', 'wb') as bigfile:
+        print(bigfile.name)
+        bigfile.write(os.urandom(1000000))  # 1 MB
+    exit_code = bundle_lambda('./handler.py', folders_from_file)
+    assert_equal(exit_code, 0)
 
-                                    deployment {
-                                        region = "eu-west-1"
-                                        artifactBucket = "7finity-dp-dev-deployment"
 
-                                    }
-                                """
-        conf = ConfigFactory.parse_string(config_string)
-        lambda_name = self.temporary_function_name
-        lambda_description = conf.get('lambda.description')
-        role_arn = role['Arn']
-        lambda_handler = conf.get('lambda.handlerFunction')
-        handler_filename = conf.get('lambda.handlerFile')
-        timeout = int(conf.get_string('lambda.timeout'))
-        memory_size = int(conf.get_string('lambda.memorySize'))
-        zip_name = conf.get('bundling.zip')
-        folders_from_file = conf.get('bundling.folders')
-        subnet_ids = conf.get('lambda.vpc.subnetIds', None)
-        security_groups = conf.get('lambda.vpc.securityGroups', None)
-        region = conf.get('deployment.region')
-        artifact_bucket = conf.get('deployment.artifactBucket', None)
+@attr('slow')
+@with_setup_args(_setup, _teardown)
+def test_bundle_lambda_exceeds_limit(cwd, test_folder, temp_files):
+    folders_from_file = [
+        {'source': './vendored', 'target': '.'},
+        {'source': './impl', 'target': 'impl'}
+    ]
+    os.environ['ENV'] = 'DEV'
+    os.mkdir('./vendored')
+    os.mkdir('./impl')
+    with open('./requirements.txt', 'w') as req:
+        req.write('pyhocon\n')
+    with open('./handler.py', 'w') as req:
+        req.write('# this is my lambda handler\n')
+    with open('./settings_dev.conf', 'w') as req:
+        req.write('\n')
+    # write 51MB file -> this gets us a zip file that exceeds the 50MB limit
+    with open('./impl/bigfile', 'wb') as bigfile:
+        print(bigfile.name)
+        bigfile.write(os.urandom(51100000))  # 51 MB
 
-        deploy_lambda(function_name=lambda_name,
-                      role=role_arn,
-                      handler_filename=handler_filename,
-                      handler_function=lambda_handler,
-                      folders=folders_from_file,
-                      description=lambda_description,
-                      timeout=timeout,
-                      memory=memory_size,
-                      artifact_bucket=artifact_bucket)
+    # capture ERROR logging:
+    with LogCapture(level=logging.ERROR) as l:
+        exit_code = bundle_lambda('./handler.py', folders_from_file)
+        l.check(
+            ('ramuda_utils', 'ERROR',
+             'Deployment bundles must not be bigger than 50MB'),
+            ('ramuda_utils', 'ERROR',
+             'See http://docs.aws.amazon.com/lambda/latest/dg/limits.html')
+        )
 
-        delete_lambda(self.temporary_function_name)
+    assert_equal(exit_code, 1)
 
-    def test_get_packages_to_ignore(self):
-        test_folder = os.getcwdu() + '/resources/vendored'
-        log.info(install_dependencies_with_pip(os.getcwdu() + '/resources/requirements.txt',
-                                               test_folder))
-        packages = os.listdir(test_folder)
-        log.info('packages in test folder:')
-        for package in packages:
-            log.debug(package)
-        matches = get_packages_to_ignore(test_folder)
-        log.info('matches in test folder:')
-        for match in sorted(matches):
-            log.debug(match)
-        self.assertTrue('boto3/__init__.py' in matches)
-        self.assertFalse('werkzeug' in matches)
 
-    def test_cleanup_folder(self):
-        test_folder = os.getcwdu() + '/resources/vendored'
-        log.info(install_dependencies_with_pip(os.getcwdu() + '/resources/requirements.txt',
-                                               test_folder))
+def test_unit():
+    assert_equal(unit('Duration'), 'Milliseconds')
+    assert_equal(unit('Else'), 'Count')
 
-        log.info(get_size(test_folder))
-        cleanup_folder(test_folder)
-        log.info(get_size(test_folder))
-        packages = os.listdir(test_folder)
-        log.debug(packages)
-        self.assertTrue('boto3' not in packages)
-'''
+
+def test_aggregate_datapoints():
+    assert_equal(aggregate_datapoints(
+        [{'Sum': 0.1}, {'Sum': 0.1}, {'Sum': 0.1}, {'Sum': 0.1}, {'Sum': 0.1},
+         {'Sum': 0.1}]), 0)
+    assert_equal(aggregate_datapoints(
+        [{'Sum': 1.1}, {'Sum': 1.1}, {'Sum': 1.1}, {'Sum': 1.1}]), 4)
+
+
+def test_json2table():
+    data = {
+        'sth': 'here',
+        'number': 1.1,
+        'ResponseMetadata': 'bla'
+    }
+    expected = u'\u2552\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2564\u2550\u2550\u2550\u2550\u2550\u2550\u2555\n\u2502 sth    \u2502 here \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502 number \u2502 1.1  \u2502\n\u2558\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2567\u2550\u2550\u2550\u2550\u2550\u2550\u255b'
+    actual = json2table(data)
+    assert_equal(actual, expected)
+
+
+def test_json2table_exception():
+    data = json.dumps({
+        'sth': 'here',
+        'number': 1.1,
+        'ResponseMetadata': 'bla'
+    })
+    actual = json2table(data)
+    assert_equal(actual, data)
+
+
+def test_create_sha256():
+    actual = create_sha256('Meine Oma fährt im Hühnerstall Motorrad')
+    expected = 'SM6siXnsKAmQuG5egM0MYKgUU60nLFxUVeEvTcN4OFI='
+    assert_equal(actual, expected)
+
+
+def test_progress_percentage():
+    class ProgressCallbackInvoker(BaseSubscriber):
+        """A back-compat wrapper to invoke a provided callback via a subscriber
+
+        :param callback: A callable that takes a single positional argument for
+            how many bytes were transferred.
+        """
+        def __init__(self, callback):
+            self._callback = callback
+
+        def on_progress(self, bytes_transferred, **kwargs):
+            self._callback(bytes_transferred)
+
+    # create dummy file
+    tf = NamedTemporaryFile(delete=False, suffix='.tgz')
+    open(tf.name, 'w').write('some content here...')
+    out = StringIO()
+    # instantiate ProgressReporter
+    callback = ProgressPercentage(tf.name, out=out)
+    subscriber = ProgressCallbackInvoker(callback)
+    # 1 byte -> 5%
+    time.sleep(0.001)
+    subscriber.on_progress(bytes_transferred=1)
+    assert_regexp_matches(out.getvalue().strip(),
+                          '.*\.tgz  1 / 20\.0  \(5\.00%\)')
+    # 11 (1+10) byte -> 55%
+    subscriber.on_progress(bytes_transferred=10)
+    assert_regexp_matches(out.getvalue().strip(),
+                          '.*\.tgz  11 / 20\.0  \(55\.00%\)')
+
+    # cleanup the testfile
+    tf.close()
+    os.unlink(tf.name)
+
+
+#@attr('this')
