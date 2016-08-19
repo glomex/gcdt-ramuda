@@ -14,7 +14,7 @@ from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
     wire, bundle_lambda, unwire, delete_lambda, rollback, ping
 
-log = setup_logger(logger_name='ramuda_tool')
+log = setup_logger(logger_name='ramuda')
 
 # TODO introduce own config for account detection
 # TODO reupload on requirements.txt changes

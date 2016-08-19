@@ -20,7 +20,7 @@ from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     aggregate_datapoints, json2table, create_sha256, ProgressPercentage
 from gcdt.logger import setup_logger
 
-log = setup_logger(logger_name='RamudaTestCase')
+log = setup_logger(logger_name='ramuda_test')
 
 
 def here(p): return os.path.join(os.path.dirname(__file__), p)
@@ -93,9 +93,9 @@ def test_cleanup_folder(cwd, test_folder, temp_files):
     log.info(_install_dependencies_with_pip(
         here('resources/sample_lambda/requirements.txt'), test_folder))
 
-    log.info(get_size(test_folder))
+    log.debug('test folder size: %s' % get_size(test_folder))
     cleanup_folder(test_folder, ramuda_ignore)
-    log.info(get_size(test_folder))
+    log.debug('test folder size: %s' % get_size(test_folder))
     packages = os.listdir(test_folder)
     log.debug(packages)
     assert_not_in('boto3', packages)
@@ -248,6 +248,3 @@ def test_progress_percentage():
     # cleanup the testfile
     tf.close()
     os.unlink(tf.name)
-
-
-#@attr('this')
