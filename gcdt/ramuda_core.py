@@ -245,7 +245,7 @@ def deploy_lambda(function_name, role, handler_filename, handler_function,
         if check_buffer_exceeds_limit(zipfile):
             return 1
         # TODO: check this!
-        log.info('buffer size: %0.2f' % float(len(zipfile) / 1000000.0))
+        log.info('buffer size: %0.2f MB' % float(len(zipfile) / 1000000.0))
         function_version = _create_lambda(function_name, role,
                                           handler_filename, handler_function,
                                           folders, description, timeout,
