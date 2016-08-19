@@ -10,6 +10,8 @@ import subprocess
 import uuid
 from datetime import datetime, timedelta
 import boto3
+import json
+from textwrap import TextWrapper
 from botocore.exceptions import ClientError as ClientError
 from clint.textui import colored
 from gcdt import monitoring
@@ -245,8 +247,7 @@ def deploy_lambda(function_name, role, handler_filename, handler_function,
                                       paths=folders)
         if check_buffer_exceeds_limit(zipfile):
             return 1
-        log.info(float(len(zipfile) / 10000000))
-        function_version = _create_lambda(function_name, role,
+        function_version = (function_name, role,
                                           handler_filename, handler_function,
                                           folders, description, timeout,
                                           memory, subnet_ids, security_groups,
@@ -268,7 +269,7 @@ def _create_lambda(function_name, role, handler_filename, handler_function,
                    subnet_ids=None, security_groups=None,
                    artifact_bucket=None, zipfile=None, slack_token=None):
     log.debug('create lambda function: %s' % function_name)
-    # move to caller!
+    # move to caller!_create_lambda
     # _install_dependencies_with_pip('requirements.txt', './vendored')
     client = boto3.client('lambda')
     # print ('creating function %s with role %s handler %s folders %s timeout %s memory %s') % (
@@ -516,10 +517,95 @@ def delete_lambda(function_name, slack_token=None):
     """
     client = boto3.client('lambda')
     response = client.delete_function(FunctionName=function_name)
+    # TODO remove event source first and maybe also needed for permissions
     print(json2table(response))
     message = 'ramuda bot: deleted lambda function: %s' % function_name
     monitoring.slacker_notifcation('systemmessages', message, slack_token)
     return 0
+
+
+def info(function_name, s3_event_sources=None, time_event_sources=None, alias_name=ALIAS_NAME):
+    if not lambda_exists(function_name):
+        print(colored.red('The function you try to display doesn\'t ' +
+                          'exist... Bailing out...'))
+        return 1
+
+    lambda_client = boto3.client('lambda')
+    lambda_function = lambda_client.get_function(FunctionName=function_name)
+    lambda_alias = lambda_client.get_alias(FunctionName=function_name,Name=alias_name)
+    lambda_arn = lambda_alias['AliasArn']
+
+    if lambda_function is not None:
+        print(json2table(lambda_function['Configuration']).encode('utf-8'))
+        print(json2table(lambda_alias).encode('utf-8'))
+
+        print("\n### PERMISSION ###\n")
+
+        try:
+            result = lambda_client.get_policy(FunctionName=function_name, Qualifier=alias_name)
+
+            policy = json.loads(result['Policy'])
+            for statement in policy['Statement']:
+                print('{} ({}) -> {}'.format(
+                    statement['Condition']['ArnLike']['AWS:SourceArn'],
+                    statement['Principal']['Service'],
+                    statement['Resource']
+                ))
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                print("Policy not found!")
+            else:
+                raise e
+
+        print("\n### EVENT SOURCES ###\n")
+
+        # S3 Events
+        client_s3 = boto3.resource('s3')
+        client_s3_alt = boto3.client('s3')
+        for s3_event_source in s3_event_sources:
+            bucket_name = s3_event_source.get('bucket')
+            print('- \tS3: %s' % bucket_name)
+
+            bucket_notification = client_s3.BucketNotification(bucket_name)
+            bucket_notification.load()
+
+            response = client_s3_alt.get_bucket_notification_configuration(Bucket=bucket_name)
+
+            if 'LambdaFunctionConfigurations' in response:
+                for config in response['LambdaFunctionConfigurations']:
+                    # TODO Beautify
+                    #wrapper = TextWrapper(initial_indent='\t', subsequent_indent='\t')
+                    #output = "\n".join(wrapper.wrap(json.dumps(config, indent=True)))
+                    #print(json.dumps(config, indent=True))
+                    print('\t\t->{}'.format(config['LambdaFunctionArn']))
+            else:
+                print('\tNot attached')
+
+            # if bucket_notification is not None:
+            #     print('\t{}'.format(bucket_notification))
+            # else:
+            #     print('\tNot attached!')
+
+        # CloudWatch Event
+        client_event = boto3.client('events')
+        for time_event in time_event_sources:
+            rule_name = time_event.get('ruleName')
+            print('- \tCloudWatch: %s' % rule_name)
+
+            # Delete rule target
+            try:
+                target_list = client_event.list_targets_by_rule(
+                    Rule=rule_name,
+                )
+                print('\t{}'.format(target_list['Targets']))
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                    print('\tNot attached!')
+                else:
+                    raise e
+
+
+
 
 
 def wire(function_name, s3_event_sources=None, time_event_sources=None,
@@ -632,6 +718,21 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
             client_event.delete_rule(
                 Name=rule_name
             )
+
+    result = client_lambda.get_policy(FunctionName=function_name, Qualifier=alias_name)
+
+    policy = json.loads(result['Policy'])
+    for statement in policy['Statement']:
+        print('{} ({})'.format(
+            statement['Sid'],
+            statement['Principal']['Service']
+        ))
+
+    # response = client.remove_permission(
+    #     FunctionName='string',
+    #     StatementId='string',
+    #     Qualifier='string'
+    # )
 
     message = ('ramuda bot: UN-wiring lambda function: %s ' % function_name +
                'with alias %s' % alias_name)

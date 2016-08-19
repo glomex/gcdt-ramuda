@@ -12,7 +12,7 @@ from docopt import docopt
 from gcdt import utils
 from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
-    wire, bundle_lambda, unwire, delete_lambda, rollback, ping
+    wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info
 
 log = setup_logger(logger_name='ramuda_tool')
 
@@ -30,6 +30,7 @@ DOC = """Usage:
         ramuda deploy
         ramuda list
         ramuda metrics <lambda>
+        ramuda info
         ramuda wire
         ramuda unwire
         ramuda delete  -f <lambda>
@@ -94,6 +95,12 @@ def main():
     elif arguments['delete']:
         exit_code = delete_lambda(arguments['<lambda>'],
                                   slack_token=slack_token)
+    elif arguments['info']:
+        conf = read_lambda_config()
+        function_name = conf.get('lambda.name')
+        s3_event_sources = conf.get('lambda.events.s3Sources', [])
+        time_event_sources = conf.get('lambda.events.timeSchedules', [])
+        exit_code = info(function_name, s3_event_sources, time_event_sources)
     elif arguments['wire']:
         conf = read_lambda_config()
         function_name = conf.get('lambda.name')
