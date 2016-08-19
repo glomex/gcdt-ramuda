@@ -18,7 +18,7 @@ from gcdt.ramuda_utils import make_zip_file_bytes, json2table, s3_upload, \
     aggregate_datapoints, check_buffer_exceeds_limit
 from gcdt.logger import setup_logger
 
-log = setup_logger(logger_name='ramuda_tool')
+log = setup_logger(logger_name='ramuda_core')
 ALIAS_NAME = 'ACTIVE'
 
 
