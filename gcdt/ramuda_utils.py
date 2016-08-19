@@ -250,12 +250,12 @@ def cleanup_folder(path, ramuda_ignore_file=None):
 
 
 def read_ramuda_config(config_file=None):  # TODO: turn this into .gcdt config
-    """Read .kumo config file from user home.
+    """Read .ramuda config file from user home.
 
     :return: pyhocon configuration, exit_code
     """
     if not config_file:
-        config_file = os.path.expanduser('~') + '/' + '.kumo'
+        config_file = os.path.expanduser('~') + '/' + '.ramuda'
     try:
         config = ConfigFactory.parse_file(config_file)
         return config, 0
