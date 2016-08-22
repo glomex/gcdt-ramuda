@@ -11,11 +11,13 @@ from nose.tools import assert_true, assert_equal, assert_greater_equal
 from nose.plugins.attrib import attr
 from .helpers import check_preconditions, random_string, with_setup_args
 from gcdt.ramuda_core import delete_lambda, deploy_lambda, \
-    _lambda_add_time_schedule_event_source, _lambda_add_invoke_permission \
+    _lambda_add_time_schedule_event_source, _lambda_add_invoke_permission, \
+    wire, unwire
 
 from gcdt.logger import setup_logger
 
-log = setup_logger(logger_name='RamudaTestCase')
+log = setup_logger(logger_name='ramuda_test_aws')
+SLACK_TOKEN = '***REMOVED***'
 
 
 def here(p): return os.path.join(os.path.dirname(__file__), p)
@@ -35,7 +37,7 @@ def _delete_role(role_name):
 
     :param role: the temporary role that has been created via _create_role
     """
-    #role_name = role['RoleName']
+    # role_name = role['RoleName']
     iam = boto3.client('iam')
     roles = [r['RoleName'] for r in iam.list_roles()['Roles']]
     if role_name in roles:
@@ -120,7 +122,7 @@ def _setup():
     if not os.path.exists('./vendored'):
         # reuse ./vendored folder to save us some time during pip install...
         os.makedirs('./vendored')
-    return {'cwd': cwd, 'temp_files': temp_files}
+    return {'cwd': cwd, 'temp_files': temp_files, 'temp_roles': []}
 
 
 def _teardown(cwd, temp_files=[], temp_roles=[]):
@@ -134,7 +136,7 @@ def _teardown(cwd, temp_files=[], temp_roles=[]):
 
 @attr('aws')
 @with_setup_args(_setup, _teardown)
-def test_create_lambda(cwd, temp_files):
+def test_create_lambda(cwd, temp_files, temp_roles):
     log.info('running test_create_lambda')
     temp_string = random_string()
     lambda_name = 'jenkins_test_' + temp_string
@@ -225,7 +227,7 @@ def test_create_lambda(cwd, temp_files):
 
 @attr('aws')
 @with_setup_args(_setup, _teardown)
-def test_create_lambda_with_s3(cwd, temp_files):
+def test_create_lambda_with_s3(cwd, temp_files, temp_roles):
     log.info('running test_create_lambda_with_s3')
     account = os.getenv('ACCOUNT')
     temp_string = random_string()
@@ -316,7 +318,7 @@ def test_create_lambda_with_s3(cwd, temp_files):
 
 @attr('aws')
 @with_setup_args(_setup, _teardown)
-def test_update_lambda(cwd, temp_files):
+def test_update_lambda(cwd, temp_files, temp_roles):
     log.info('running test_update_lambda')
     temp_string = random_string()
     lambda_name = 'jenkins_test_%s' % temp_string
@@ -325,6 +327,7 @@ def test_update_lambda(cwd, temp_files):
     _create_lambda_helper(lambda_name, role_name,
                           './resources/sample_lambda/handler.py')
     # update the function
+    # TODO: do not recreate the role!
     _create_lambda_helper(lambda_name, role_name,
                           './resources/sample_lambda/handler_v2.py')
 
@@ -333,7 +336,8 @@ def test_update_lambda(cwd, temp_files):
     return {'temp_roles': [role_name]}
 
 
-def _create_lambda_helper(lambda_name, role_name, handler_filename):
+def _create_lambda_helper(lambda_name, role_name, handler_filename,
+                          lambda_handler='handler.handle'):
     # caller needs to clean up both lambda and role!
     role = _create_role(
         role_name,
@@ -344,7 +348,7 @@ def _create_lambda_helper(lambda_name, role_name, handler_filename):
 
     lambda_description = 'lambda created for unittesting ramuda deployment'
     role_arn = role['Arn']
-    lambda_handler = 'handler.handle'
+    # lambda_handler = 'handler.handle'
     timeout = 300
     memory_size = 128
     folders_from_file = [
@@ -365,7 +369,7 @@ def _create_lambda_helper(lambda_name, role_name, handler_filename):
                   artifact_bucket=artifact_bucket)
 
 
-def get_count(function_name, alias_name='ACTIVE', version=None):
+def _get_count(function_name, alias_name='ACTIVE', version=None):
     """Send a count request to a lambda function.
 
     :param function_name:
@@ -412,6 +416,11 @@ def get_count(function_name, alias_name='ACTIVE', version=None):
 #         ruleDescription = "run every 1 min",
 #         scheduleExpression = "rate(1 minute)"
 #       }
+#     s3Sources = [
+#       {
+#         bucket = "lookup:stack:dp-dev-ingest-sync-prod-dev:BucketAdproxyInput",
+#         type = "s3:ObjectCreated:*" , suffix=".gz"
+#       }
 #     ]
 #   }
 # }
@@ -429,8 +438,9 @@ def get_count(function_name, alias_name='ACTIVE', version=None):
 
 @attr('aws')
 @with_setup_args(_setup, _teardown)
-def test_schedule_event_source(cwd, temp_files):
-    # include reading config from settings file!
+def test_schedule_event_source(cwd, temp_files, temp_roles):
+    log.info('running test_schedule_event_source')
+    # include reading config from settings file
     config_string = '''
         lambda {
             events {
@@ -458,7 +468,8 @@ def test_schedule_event_source(cwd, temp_files):
     lambda_name = 'jenkins_test_%s' % temp_string
     role_name = 'unittest_%s_lambda' % temp_string
     _create_lambda_helper(lambda_name, role_name,
-                          './resources/sample_lambda/handler_counter.py')
+                          './resources/sample_lambda/handler_counter.py',
+                          lambda_handler='handler_counter.handle')
 
     # lookup lambda arn
     lambda_client = boto3.client('lambda')
@@ -474,8 +485,107 @@ def test_schedule_event_source(cwd, temp_files):
 
     time.sleep(150)  # wait for at least 2 invocations
 
-    count = get_count(lambda_name)
-    assert_greater_equal(count, 2)
+    count = _get_count(lambda_name)
+    assert_greater_equal(int(count), 2)
 
+    delete_lambda(lambda_name)
+    return {'temp_roles': [role_name]}
+
+
+@attr('aws')
+@with_setup_args(_setup, _teardown)
+def test_wire_unwire_lambda_with_s3(cwd, temp_files, temp_roles):
+    log.info('running test_wire_unwire_lambda_with_s3')
+
+    # inner helpers
+    # bucket helpers (parts borrowed from tenkai)
+    def _create_bucket(bucket):
+        client = boto3.client('s3')
+        client.create_bucket(
+            Bucket=bucket,
+            CreateBucketConfiguration={
+                'LocationConstraint': 'eu-west-1'
+            }
+        )
+
+    def _delete_bucket(bucket):
+        log.debug('deleting bucket %s' % bucket)
+        if bucket.startswith('unittest-'):
+            s3 = boto3.resource('s3')
+            # delete all objects first
+            bu = s3.Bucket(bucket)
+            log.debug('deleting keys')
+            for key in bu.objects.all():
+                log.debug('deleting key: %s' % key)
+                key.delete()
+            log.debug('deleting bucket')
+            # now we can delete the bucket
+            bu.delete()
+
+    # create a lambda function
+    temp_string = random_string()
+    lambda_name = 'jenkins_test_%s' % temp_string
+    role_name = 'unittest_%s_lambda' % temp_string
+    _create_lambda_helper(lambda_name, role_name,
+                          './resources/sample_lambda/handler_counter.py',
+                          lambda_handler='handler_counter.handle')
+
+    # create a bucket
+    bucket_name = 'unittest-lambda-s3-event-source-%s' % temp_string
+    _create_bucket(bucket_name)
+
+    # include reading config from settings!
+    config_string = '''
+        lambda {
+            events {
+                s3Sources = [
+                    {
+                        bucket = "%s",
+                        type = "s3:ObjectCreated:*" , suffix=".gz"
+                    }
+                ]
+            }
+        }
+    ''' % bucket_name
+    conf = ConfigFactory.parse_string(config_string)
+
+    # wire the function with the bucket
+    s3_event_sources = conf.get('lambda.events.s3Sources', [])
+    time_event_sources = conf.get('lambda.events.timeSchedules', [])
+    exit_code = wire(lambda_name, s3_event_sources, time_event_sources,
+                     slack_token=SLACK_TOKEN)
+    assert_equal(exit_code, 0)
+
+    # put a file into the bucket
+    boto3.client('s3').put_object(
+        ACL='public-read',
+        Body=b'this is some content',
+        Bucket=bucket_name,
+        Key='test_file.gz',
+    )
+
+    # validate function call
+    time.sleep(10)  # sleep till the event arrived
+    assert_equal(int(_get_count(lambda_name)), 1)
+
+    # unwire the function
+    exit_code = unwire(lambda_name, s3_event_sources, time_event_sources,
+                       slack_token=SLACK_TOKEN)
+    assert_equal(exit_code, 0)
+
+    # put in another file
+    boto3.client('s3').put_object(
+        ACL='public-read',
+        Body=b'this is some content',
+        Bucket=bucket_name,
+        Key='test_file_2.gz',
+    )
+
+    # validate function not called
+    time.sleep(10)
+    assert_equal(int(_get_count(lambda_name)), 1)
+
+    # cleanup
+    _delete_bucket(bucket_name)
     delete_lambda(lambda_name)
     return {'temp_roles': [role_name]}
