@@ -8,6 +8,7 @@ from __future__ import print_function
 import sys
 import subprocess
 import uuid
+import time
 from datetime import datetime, timedelta
 import boto3
 from botocore.exceptions import ClientError as ClientError
@@ -54,6 +55,19 @@ def _alias_exists(function_name, alias_name):
         return True
     except Exception:
         return False
+
+
+def _get_alias_version(function_name, alias_name):
+    # this is used for testing - it returns the version
+    client = boto3.client('lambda')
+    try:
+        response = client.get_alias(
+            FunctionName=function_name,
+            Name=alias_name
+        )
+        return response['FunctionVersion']
+    except Exception:
+        return
 
 
 def _deploy_alias(function_name, function_version, alias_name=ALIAS_NAME):
@@ -180,7 +194,7 @@ def _install_dependencies_with_pip(requirements_file, destination_folder):
     return 0
 
 
-def list_functions():
+def list_functions(out=sys.stdout):
     """List the deployed lambda functions and print configuration.
 
     :return: exit_code
@@ -188,15 +202,15 @@ def list_functions():
     client = boto3.client('lambda')
     response = client.list_functions()
     for function in response['Functions']:
-        print(function['FunctionName'])
-        print('\t' 'Memory: ' + str(function['MemorySize']))
-        print('\t' 'Timeout: ' + str(function['Timeout']))
-        print('\t' 'Role: ' + str(function['Role']))
-        print('\t' 'Current Version: ' + str(function['Version']))
-        print('\t' 'Last Modified: ' + str(function['LastModified']))
-        print('\t' 'CodeSha256: ' + str(function['CodeSha256']))
+        print(function['FunctionName'], file=out)
+        print('\t' 'Memory: ' + str(function['MemorySize']), file=out)
+        print('\t' 'Timeout: ' + str(function['Timeout']), file=out)
+        print('\t' 'Role: ' + str(function['Role']), file=out)
+        print('\t' 'Current Version: ' + str(function['Version']), file=out)
+        print('\t' 'Last Modified: ' + str(function['LastModified']), file=out)
+        print('\t' 'CodeSha256: ' + str(function['CodeSha256']), file=out)
 
-        print('\n')
+        print('\n', file=out)
         # print json.dumps(response, indent=4)
     return 0
 
@@ -316,7 +330,16 @@ def _create_lambda(function_name, role, handler_filename, handler_function,
         return
 
     function_version = response['Version']
+    print(response)
     print(json2table(response))
+    # FIXME: 23.08.2016 WHY update configuration after create?
+    # timing issue:
+    # http://jenkins.dev.dp.glomex.cloud/job/packages/job/gcdt_pull_request/32/console
+    #       1) we need to wait till the function is available for update
+    #          is there a better way than sleep?
+    time.sleep(15)
+    #       2) I believe this was implemented as shortcut to set subnet, and sg
+    #          a way better way is to set this is using the using VPCConfig argument!
     _update_lambda_configuration(function_name, role, handler_function,
                                  description, timeout, memory, subnet_ids,
                                  security_groups)
@@ -438,7 +461,7 @@ def _update_lambda_configuration(function_name, role, handler_function,
     return function_version
 
 
-def get_metrics(name):
+def get_metrics(name, out=sys.stdout):
     """Print out cloudformation metrics for a lambda function.
 
     :param name: name of the lambda function
@@ -465,7 +488,8 @@ def get_metrics(name):
             Unit=unit(metric)
         )
         print('\t%s %s' % (metric,
-                           repr(aggregate_datapoints(response['Datapoints']))))
+                           repr(aggregate_datapoints(response['Datapoints']))),
+              file=out)
     return 0
 
 
@@ -666,4 +690,5 @@ def ping(function_name, alias_name=ALIAS_NAME, version=None):
         )
 
     results = response['Payload'].read()  # payload is a 'StreamingBody'
+    # TODO: ping is a little boring without any output!
     return results

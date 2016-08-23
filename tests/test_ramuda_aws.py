@@ -3,21 +3,33 @@ from __future__ import print_function
 import os
 import json
 import time
+from StringIO import StringIO
 import boto3
 import textwrap
 from pyhocon import ConfigFactory
 import nose
-from nose.tools import assert_true, assert_equal, assert_greater_equal
+from nose.tools import assert_true, assert_equal, assert_greater_equal, \
+    assert_in, assert_not_in, assert_regexp_matches
 from nose.plugins.attrib import attr
+
 from .helpers import check_preconditions, random_string, with_setup_args
+from .helpers_aws import create_bucket, delete_bucket
 from gcdt.ramuda_core import delete_lambda, deploy_lambda, \
-    _lambda_add_time_schedule_event_source, _lambda_add_invoke_permission, \
-    wire, unwire
+    _lambda_add_time_schedule_event_source, \
+    wire, unwire, _lambda_add_invoke_permission, list_functions, \
+    _update_lambda_configuration, get_metrics, rollback, _get_alias_version
+from gcdt.ramuda_utils import list_lambda_versions, make_zip_file_bytes, \
+    create_sha256, get_remote_code_hash
 
 from gcdt.logger import setup_logger
 
 log = setup_logger(logger_name='ramuda_test_aws')
+# TODO: remove the slack token (see mail)
 SLACK_TOKEN = '***REMOVED***'
+
+# TODO: refactor tests to clean up lambda functions in case of failure
+# TODO: speedup tests by reusing lambda functions where possible
+# TODO: move AWS resource helpers to helpers_aws.py
 
 
 def here(p): return os.path.join(os.path.dirname(__file__), p)
@@ -92,7 +104,7 @@ def _create_role(name, policies=None):
     # calling the CreateFunction operation: The role defined for the function
     # cannot be assumed by Lambda.
     # current assumption is that the role is not propagated to lambda in time
-    time.sleep(10)
+    time.sleep(15)
 
     return role
 
@@ -367,6 +379,7 @@ def _create_lambda_helper(lambda_name, role_name, handler_filename,
                   timeout=timeout,
                   memory=memory_size,
                   artifact_bucket=artifact_bucket)
+    time.sleep(15)
 
 
 def _get_count(function_name, alias_name='ACTIVE', version=None):
@@ -492,35 +505,10 @@ def test_schedule_event_source(cwd, temp_files, temp_roles):
     return {'temp_roles': [role_name]}
 
 
-@attr('aws')
+@attr('aws', 'slow')
 @with_setup_args(_setup, _teardown)
 def test_wire_unwire_lambda_with_s3(cwd, temp_files, temp_roles):
     log.info('running test_wire_unwire_lambda_with_s3')
-
-    # inner helpers
-    # bucket helpers (parts borrowed from tenkai)
-    def _create_bucket(bucket):
-        client = boto3.client('s3')
-        client.create_bucket(
-            Bucket=bucket,
-            CreateBucketConfiguration={
-                'LocationConstraint': 'eu-west-1'
-            }
-        )
-
-    def _delete_bucket(bucket):
-        log.debug('deleting bucket %s' % bucket)
-        if bucket.startswith('unittest-'):
-            s3 = boto3.resource('s3')
-            # delete all objects first
-            bu = s3.Bucket(bucket)
-            log.debug('deleting keys')
-            for key in bu.objects.all():
-                log.debug('deleting key: %s' % key)
-                key.delete()
-            log.debug('deleting bucket')
-            # now we can delete the bucket
-            bu.delete()
 
     # create a lambda function
     temp_string = random_string()
@@ -532,7 +520,7 @@ def test_wire_unwire_lambda_with_s3(cwd, temp_files, temp_roles):
 
     # create a bucket
     bucket_name = 'unittest-lambda-s3-event-source-%s' % temp_string
-    _create_bucket(bucket_name)
+    create_bucket(bucket_name)
 
     # include reading config from settings!
     config_string = '''
@@ -586,6 +574,201 @@ def test_wire_unwire_lambda_with_s3(cwd, temp_files, temp_roles):
     assert_equal(int(_get_count(lambda_name)), 1)
 
     # cleanup
-    _delete_bucket(bucket_name)
+    delete_bucket(bucket_name)
+    delete_lambda(lambda_name)
+    return {'temp_roles': [role_name]}
+
+
+@attr('aws')
+@with_setup_args(_setup, _teardown)
+def test_lambda_add_invoke_permission(cwd, temp_files, temp_roles):
+    log.info('running test_lambda_add_invoke_permission')
+
+    # create a lambda function
+    temp_string = random_string()
+    lambda_name = 'jenkins_test_%s' % temp_string
+    role_name = 'unittest_%s_lambda' % temp_string
+    _create_lambda_helper(lambda_name, role_name,
+                          './resources/sample_lambda/handler_counter.py',
+                          lambda_handler='handler_counter.handle')
+
+    # create a bucket
+    bucket_name = 'unittest-lambda-s3-bucket-%s' % temp_string
+    create_bucket(bucket_name)
+
+    s3_arn = 'arn:aws:s3:::' + bucket_name
+    response = _lambda_add_invoke_permission(
+        lambda_name, 's3.amazonaws.com', s3_arn)
+
+    # {"Statement":"{\"Condition\":{\"ArnLike\":{\"AWS:SourceArn\":\"arn:aws:s3:::unittest-lambda-s3-bucket-coedce\"}},\"Action\":[\"lambda:InvokeFunction\"],\"Resource\":\"arn:aws:lambda:eu-west-1:188084614522:function:jenkins_test_coedce:ACTIVE\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"s3.amazonaws.com\"},\"Sid\":\"07c77fac-68ff-11e6-97f8-c4850848610b\"}"}
+
+    assert_not_in('Error', response)
+    assert_in('lambda:InvokeFunction', response['Statement'])
+
+    # cleanup
+    delete_bucket(bucket_name)
+    delete_lambda(lambda_name)
+    return {'temp_roles': [role_name]}
+
+
+@attr('aws')
+@with_setup_args(_setup, _teardown)
+def test_list_functions(cwd, temp_files, temp_roles):
+    log.info('running test_list_functions')
+
+    # create a lambda function
+    temp_string = random_string()
+    lambda_name = 'jenkins_test_%s' % temp_string
+    role_name = 'unittest_%s_lambda' % temp_string
+    _create_lambda_helper(lambda_name, role_name,
+                          './resources/sample_lambda/handler_counter.py',
+                          lambda_handler='handler_counter.handle')
+    out = StringIO()
+    list_functions(out)
+
+    expected_regex = ".*%s\\n\\tMemory: 128\\n\\tTimeout: 300\\n\\tRole: arn:aws:iam::\d{12}:role\/%s\\n\\tCurrent Version: \$LATEST.*" \
+                     % (lambda_name, role_name)
+
+    assert_regexp_matches(out.getvalue().strip(), expected_regex)
+
+    # cleanup
+    delete_lambda(lambda_name)
+    return {'temp_roles': [role_name]}
+
+
+@attr('aws')
+@with_setup_args(_setup, _teardown)
+def test_update_lambda_configuration(cwd, temp_files, temp_roles):
+    log.info('running test_update_lambda_configuration')
+
+    # create a lambda function
+    temp_string = random_string()
+    lambda_name = 'jenkins_test_%s' % temp_string
+    role_name = 'unittest_%s_lambda' % temp_string
+    _create_lambda_helper(lambda_name, role_name,
+                          './resources/sample_lambda/handler_counter.py',
+                          lambda_handler='handler_counter.handle')
+
+    handler_function = './resources/sample_lambda/handler_counter.py'
+    lambda_description = 'lambda created for unittesting ramuda deployment'
+
+    iam = boto3.client('iam')
+    role_arn = iam.get_role(RoleName=role_name)['Role']['Arn']
+    timeout = 300
+    memory_size = 256
+
+    function_version = _update_lambda_configuration(lambda_name, role_arn,
+                                                    handler_function,
+                                                    lambda_description, timeout,
+                                                    memory_size)
+
+    assert_equal(function_version, '$LATEST')
+
+    # cleanup
+    delete_lambda(lambda_name)
+    return {'temp_roles': [role_name]}
+
+
+@attr('aws')
+@with_setup_args(_setup, _teardown)
+def test_get_metrics(cwd, temp_files, temp_roles):
+    log.info('running test_get_metrics')
+
+    # create a lambda function
+    temp_string = random_string()
+    lambda_name = 'jenkins_test_%s' % temp_string
+    role_name = 'unittest_%s_lambda' % temp_string
+    _create_lambda_helper(lambda_name, role_name,
+                          './resources/sample_lambda/handler_counter.py',
+                          lambda_handler='handler_counter.handle')
+
+    out = StringIO()
+    get_metrics(lambda_name, out)
+
+    assert_equal(out.getvalue().strip(),
+                 'Duration 0\n\tErrors 0\n\tInvocations 0\n\tThrottles 0')
+
+    # cleanup
+    delete_lambda(lambda_name)
+    return {'temp_roles': [role_name]}
+
+
+@attr('aws')
+@with_setup_args(_setup, _teardown)
+def test_rollback(cwd, temp_files, temp_roles):
+    log.info('running test_rollback')
+
+    # create a lambda function
+    temp_string = random_string()
+    lambda_name = 'jenkins_test_%s' % temp_string
+    role_name = 'unittest_%s_lambda' % temp_string
+    _create_lambda_helper(lambda_name, role_name,
+                          './resources/sample_lambda/handler_counter.py',
+                          lambda_handler='handler_counter.handle')
+
+    alias_version = _get_alias_version(lambda_name, 'ACTIVE')
+    assert_equal(alias_version, '1')
+
+    # update the function
+    # TODO: do not recreate the role!
+    _create_lambda_helper(lambda_name, role_name,
+                          './resources/sample_lambda/handler_v2.py')
+
+    # now we use function_versoin 2!
+    alias_version = _get_alias_version(lambda_name, 'ACTIVE')
+    assert_equal(alias_version, '$LATEST')
+
+    rollback(lambda_name, alias_name='ACTIVE', version='1',
+             slack_token=SLACK_TOKEN)
+
+    # we rolled back to function_version 1
+    alias_version = _get_alias_version(lambda_name, 'ACTIVE')
+    assert_equal(alias_version, '1')
+
+    # TODO: create more versions >5
+    # TODO: do multiple rollbacks >5
+    # TODO: verify version + active after rollback
+    # TODO: verify invocations meet the right lamda_function version
+    # TODO: rollback to last version!
+
+    # here we have the test for ramuda_utils.list_lambda_versions
+    response = list_lambda_versions(lambda_name)
+    assert_equal(response['Versions'][0]['Version'], '$LATEST')
+    assert_equal(response['Versions'][1]['Version'], '1')
+    assert_equal(response['Versions'][2]['Version'], '2')
+
+    # cleanup
+    delete_lambda(lambda_name)
+    return {'temp_roles': [role_name]}
+
+
+@attr('aws')
+@with_setup_args(_setup, _teardown)
+def test_get_remote_code_hash(cwd, temp_files, temp_roles):
+    log.info('running test_get_remote_code_hash')
+
+    handler_filename = './resources/sample_lambda/handler_counter.py'
+    folders_from_file = [
+        {'source': './vendored', 'target': '.'},
+        {'source': './impl', 'target': 'impl'}
+    ]
+
+    # get local hash
+    zipfile = make_zip_file_bytes(handler=handler_filename,
+                                  paths=folders_from_file)
+    expected_hash = create_sha256(zipfile)
+
+    # create a lambda function
+    temp_string = random_string()
+    lambda_name = 'jenkins_test_%s' % temp_string
+    role_name = 'unittest_%s_lambda' % temp_string
+    _create_lambda_helper(lambda_name, role_name,
+                          handler_filename,
+                          lambda_handler='handler_counter.handle')
+
+    remote_hash = get_remote_code_hash(lambda_name)
+    assert_equal(remote_hash, expected_hash)
+
+    # cleanup
     delete_lambda(lambda_name)
     return {'temp_roles': [role_name]}

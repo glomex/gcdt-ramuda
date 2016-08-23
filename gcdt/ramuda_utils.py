@@ -54,10 +54,19 @@ def make_zip_file_bytes(paths, handler, settings='settings'):
     """
     # automatically add vendored directory
     vendored = config_tree.ConfigTree()
-    vendored.put('source', './vendored')
-    vendored.put('target', '.')
-    cleanup_folder('./vendored')
-    paths.append(vendored)
+    # check if ./vendored folder is contained!
+    vendored_missing = True
+    for p in paths:
+        if p['source'] == './vendored':
+            vendored_missing = False
+            break
+    if vendored_missing:
+        # add missing ./vendored folder to paths
+        vendored.put('source', './vendored')
+        vendored.put('target', '.')
+        paths.append(vendored)
+    cleanup_folder('./vendored')  # TODO this should be replaced by better glob!
+    # TODO: also exclude *.pyc
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         with ZipFile(buf, 'w') as z:
@@ -167,12 +176,6 @@ def aggregate_datapoints(datapoints):
 
 def list_lambda_versions(function_name):  # this is not used!!
     client = boto3.client('lambda')
-    """response = client.get_alias(
-        FunctionName=function_name,
-        Name='$LATEST'
-    )
-    print response
-    """
     response = client.list_versions_by_function(
         FunctionName=function_name,
     )
@@ -192,7 +195,8 @@ def json2table(json):
     try:
         for k, v in filter(lambda (k, v): k not in filter_terms,
                            json.iteritems()):
-            table.append([k, str(v)])
+            table.append([k.encode('ascii', 'ignore'),
+                          str(v).encode('ascii', 'ignore')])
         return tabulate(table, tablefmt='fancy_grid')
     except Exception as e:
         print(e)

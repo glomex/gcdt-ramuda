@@ -4,6 +4,7 @@ import os
 import logging
 import shutil
 from StringIO import StringIO
+from collections import OrderedDict
 from tempfile import mkdtemp, NamedTemporaryFile
 import textwrap
 import json
@@ -196,6 +197,29 @@ def test_json2table():
     }
     expected = u'\u2552\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2564\u2550\u2550\u2550\u2550\u2550\u2550\u2555\n\u2502 sth    \u2502 here \u2502\n\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u2500\u2500\u2500\u2524\n\u2502 number \u2502 1.1  \u2502\n\u2558\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2567\u2550\u2550\u2550\u2550\u2550\u2550\u255b'
     actual = json2table(data)
+    assert_equal(actual, expected)
+
+
+def test_json2table_create_lambda_response():
+    response = OrderedDict([
+        ('CodeSha256', 'CwEvufZaAmNgUnlA6yTJGi8p8MNR+mNcCNYPOIwsTNM='),
+        ('FunctionName', 'jenkins-gcdt-lifecycle-for-ramuda'),
+        ('CodeSize', 430078),
+        ('MemorySize', 256),
+        ('FunctionArn', 'arn:aws:lambda:eu-west-1:644239850139:function:jenkins-gcdt-lifecycle-for-ramuda'),
+        ('Version', '13'),
+        ('Role', 'arn:aws:iam::644239850139:role/lambda/dp-dev-store-redshift-cdn-lo-LambdaCdnRedshiftLoad-DD2S84CZFGT4'),
+        ('Timeout', 300),
+        ('LastModified', '2016-08-23T15:27:07.658+0000'),
+        ('Handler', 'handler.handle'),
+        ('Runtime', 'python2.7'),
+        ('Description', 'lambda test for ramuda')
+    ])
+
+    expected_file = here('resources/expected/expected_json2table.txt')
+    with open(expected_file) as efile:
+        expected = efile.read()
+    actual = json2table(response).encode('utf-8')
     assert_equal(actual, expected)
 
 
