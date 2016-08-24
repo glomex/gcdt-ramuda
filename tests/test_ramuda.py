@@ -4,6 +4,7 @@ import os
 import logging
 import shutil
 from StringIO import StringIO
+from collections import OrderedDict
 from tempfile import mkdtemp, NamedTemporaryFile
 import textwrap
 import json
@@ -20,7 +21,7 @@ from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     aggregate_datapoints, json2table, create_sha256, ProgressPercentage
 from gcdt.logger import setup_logger
 
-log = setup_logger(logger_name='RamudaTestCase')
+log = setup_logger(logger_name='ramuda_test')
 
 
 def here(p): return os.path.join(os.path.dirname(__file__), p)
@@ -93,9 +94,9 @@ def test_cleanup_folder(cwd, test_folder, temp_files):
     log.info(_install_dependencies_with_pip(
         here('resources/sample_lambda/requirements.txt'), test_folder))
 
-    log.info(get_size(test_folder))
+    log.debug('test folder size: %s' % get_size(test_folder))
     cleanup_folder(test_folder, ramuda_ignore)
-    log.info(get_size(test_folder))
+    log.debug('test folder size: %s' % get_size(test_folder))
     packages = os.listdir(test_folder)
     log.debug(packages)
     assert_not_in('boto3', packages)
@@ -199,6 +200,29 @@ def test_json2table():
     assert_equal(actual, expected)
 
 
+def test_json2table_create_lambda_response():
+    response = OrderedDict([
+        ('CodeSha256', 'CwEvufZaAmNgUnlA6yTJGi8p8MNR+mNcCNYPOIwsTNM='),
+        ('FunctionName', 'jenkins-gcdt-lifecycle-for-ramuda'),
+        ('CodeSize', 430078),
+        ('MemorySize', 256),
+        ('FunctionArn', 'arn:aws:lambda:eu-west-1:644239850139:function:jenkins-gcdt-lifecycle-for-ramuda'),
+        ('Version', '13'),
+        ('Role', 'arn:aws:iam::644239850139:role/lambda/dp-dev-store-redshift-cdn-lo-LambdaCdnRedshiftLoad-DD2S84CZFGT4'),
+        ('Timeout', 300),
+        ('LastModified', '2016-08-23T15:27:07.658+0000'),
+        ('Handler', 'handler.handle'),
+        ('Runtime', 'python2.7'),
+        ('Description', 'lambda test for ramuda')
+    ])
+
+    expected_file = here('resources/expected/expected_json2table.txt')
+    with open(expected_file) as efile:
+        expected = efile.read()
+    actual = json2table(response).encode('utf-8')
+    assert_equal(actual, expected)
+
+
 def test_json2table_exception():
     data = json.dumps({
         'sth': 'here',
@@ -248,6 +272,3 @@ def test_progress_percentage():
     # cleanup the testfile
     tf.close()
     os.unlink(tf.name)
-
-
-#@attr('this')

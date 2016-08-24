@@ -14,7 +14,7 @@ from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
     wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info
 
-log = setup_logger(logger_name='ramuda_tool')
+log = setup_logger(logger_name='ramuda')
 
 # TODO introduce own config for account detection
 # TODO reupload on requirements.txt changes
@@ -64,16 +64,18 @@ def read_ramuda_config():
 
 def main():
     exit_code = 0
-    are_credentials_still_valid()
     slack_token = read_ramuda_config().get('ramuda.slack-token')
     arguments = docopt(DOC)
     if arguments['list']:
+        are_credentials_still_valid()
         exit_code = list_functions()
         log.debug('debug_test')
         log.info('info_test')
     elif arguments['metrics']:
+        are_credentials_still_valid()
         exit_code = get_metrics(arguments['<lambda>'])
     elif arguments['deploy']:
+        are_credentials_still_valid()
         conf = read_lambda_config()
         lambda_name = conf.get('lambda.name')
         lambda_description = conf.get('lambda.description')
@@ -93,6 +95,7 @@ def main():
                                   security_groups=security_groups,
                                   artifact_bucket=artifact_bucket)
     elif arguments['delete']:
+        are_credentials_still_valid()
         exit_code = delete_lambda(arguments['<lambda>'],
                                   slack_token=slack_token)
     elif arguments['info']:
@@ -102,6 +105,7 @@ def main():
         time_event_sources = conf.get('lambda.events.timeSchedules', [])
         exit_code = info(function_name, s3_event_sources, time_event_sources)
     elif arguments['wire']:
+        are_credentials_still_valid()
         conf = read_lambda_config()
         function_name = conf.get('lambda.name')
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
@@ -109,6 +113,7 @@ def main():
         exit_code = wire(function_name, s3_event_sources, time_event_sources,
                          slack_token=slack_token)
     elif arguments['unwire']:
+        are_credentials_still_valid()
         conf = read_lambda_config()
         function_name = conf.get('lambda.name')
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
@@ -121,6 +126,7 @@ def main():
         folders_from_file = conf.get('bundling.folders')
         exit_code = bundle_lambda(handler_filename, folders_from_file)
     elif arguments['rollback']:
+        are_credentials_still_valid()
         if arguments['<version>']:
             exit_code = rollback(arguments['<lambda>'], 'ACTIVE',
                                  arguments['<version>'],
