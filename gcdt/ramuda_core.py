@@ -546,6 +546,7 @@ def info(function_name, s3_event_sources=None, time_event_sources=None, alias_na
 
             policy = json.loads(result['Policy'])
             for statement in policy['Statement']:
+
                 print('{} ({}) -> {}'.format(
                     statement['Condition']['ArnLike']['AWS:SourceArn'],
                     statement['Principal']['Service'],
@@ -683,6 +684,7 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
             print('\tS3: %s' % bucket_name)
 
             bucket_notification = client_s3.BucketNotification(bucket_name)
+            print(json.dumps(bucket_notification, indent=2))
             response = bucket_notification.put(
                 NotificationConfiguration={})
 
@@ -708,6 +710,8 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
             target_id_list = []
             for target in target_list['Targets']:
                 target_id_list += [target['Id']]
+            print("rule name: {}".format(rule_name))
+            print("ids : {}".format(target_id_list))
 
             client_event.remove_targets(
                 Rule=rule_name,
@@ -739,6 +743,26 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
     monitoring.slacker_notifcation('systemmessages', message, slack_token)
     return 0
 
+def _remove_permissions(function_name, services=['s3.amazonaws.com', 'events.amazonaws.com'] , alias_name=ALIAS_NAME):
+    lambda_client = boto3.client('lambda')
+    try:
+        result = lambda_client.get_policy(FunctionName=function_name, Qualifier=alias_name)
+
+        policy = json.loads(result['Policy'])
+        for statement in policy['Statement']:
+            if statement['Principal']['Service'] in services:
+                print('Removing permission {} ({}) -> {}'.format(
+                    statement['Condition']['ArnLike']['AWS:SourceArn'],
+                    statement['Principal']['Service'],
+                    statement['Resource'])
+                )
+                response_remove = lambda_client.remove_permission(FuncionName=function_name,
+                                                                  StatementId=)
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            print("Policy not found!")
+        else:
+            raise e
 
 def ping(function_name, alias_name=ALIAS_NAME, version=None):
     """Send a ping request to a lambda function.
