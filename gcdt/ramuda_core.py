@@ -343,7 +343,7 @@ def _create_lambda(function_name, role, handler_filename, handler_function,
                                  description, timeout, memory, subnet_ids,
                                  security_groups)
     message = 'ramuda bot: created new lambda function: %s ' % function_name
-    monitoring.slacker_notification('systemmessages', message, slack_token)
+    monitoring.slack_notification('systemmessages', message, slack_token)
     return function_version
 
 
@@ -359,7 +359,7 @@ def _update_lambda(function_name, handler_filename, handler_function, folders,
                                      description, timeout, memory, subnet_ids,
                                      security_groups)
     message = 'ramuda bot: updated lambda function: %s ' % function_name
-    monitoring.slacker_notification('systemmessages', message, slack_token)
+    monitoring.slack_notification('systemmessages', message, slack_token)
     return function_version
 
 
@@ -509,7 +509,7 @@ def rollback(function_name, alias_name=ALIAS_NAME, version=None,
         _update_alias(function_name, version, alias_name)
         message = ('ramuda bot: rolled back lambda function: ' +
                    '%s to version %s' % (function_name, version))
-        monitoring.slacker_notification('systemmessages', message, slack_token)
+        monitoring.slack_notification('systemmessages', message, slack_token)
     else:
         print('rolling back to previous version')
         client = boto3.client('lambda')
@@ -526,7 +526,7 @@ def rollback(function_name, alias_name=ALIAS_NAME, version=None,
 
         message = ('ramuda bot: rolled back lambda function: %s to ' +
                    'previous version') % function_name
-        monitoring.slacker_notification('systemmessages', message, slack_token)
+        monitoring.slack_notification('systemmessages', message, slack_token)
     return 0
 
 
@@ -541,7 +541,7 @@ def delete_lambda(function_name, slack_token=None):
     response = client.delete_function(FunctionName=function_name)
     print(json2table(response))
     message = 'ramuda bot: deleted lambda function: %s' % function_name
-    monitoring.slacker_notification('systemmessages', message, slack_token)
+    monitoring.slack_notification('systemmessages', message, slack_token)
     return 0
 
 
@@ -586,7 +586,7 @@ def wire(function_name, s3_event_sources=None, time_event_sources=None,
                 function_name, 'events.amazonaws.com', rule_arn)
     message = ('ramuda bot: wiring lambda function: ' +
                '%s with alias %s' % (function_name, alias_name))
-    monitoring.slacker_notification('systemmessages', message, slack_token)
+    monitoring.slack_notification('systemmessages', message, slack_token)
     return 0
 
 
@@ -658,7 +658,7 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
 
     message = ('ramuda bot: UN-wiring lambda function: %s ' % function_name +
                'with alias %s' % alias_name)
-    monitoring.slacker_notification('systemmessages', message, slack_token)
+    monitoring.slack_notification('systemmessages', message, slack_token)
     return 0
 
 
