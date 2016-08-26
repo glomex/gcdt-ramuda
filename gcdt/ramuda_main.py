@@ -11,7 +11,7 @@ from glomex_utils.config_reader import read_lambda_config
 from docopt import docopt
 from gcdt import utils
 from gcdt.logger import setup_logger
-from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
+from gcdt.ramuda_core import list_functions, cleanup_bundle, get_metrics, deploy_lambda, \
     wire, bundle_lambda, unwire, delete_lambda, rollback, ping
 
 log = setup_logger(logger_name='ramuda')
@@ -26,6 +26,7 @@ log = setup_logger(logger_name='ramuda')
 
 # creating docopt parameters and usage help
 DOC = """Usage:
+        ramuda clean
         ramuda bundle
         ramuda deploy
         ramuda list
@@ -65,7 +66,9 @@ def main():
     exit_code = 0
     slack_token = read_ramuda_config().get('ramuda.slack-token')
     arguments = docopt(DOC)
-    if arguments['list']:
+    if arguments['clean']:
+        cleanup_bundle()
+    elif arguments['list']:
         are_credentials_still_valid()
         exit_code = list_functions()
         log.debug('debug_test')
@@ -117,7 +120,7 @@ def main():
         conf = read_lambda_config()
         handler_filename = conf.get('lambda.handlerFile')
         folders_from_file = conf.get('bundling.folders')
-        exit_code = bundle_lambda(handler_filename, folders_from_file)
+        exit_code = bundle_lambda   (handler_filename, folders_from_file)
     elif arguments['rollback']:
         are_credentials_still_valid()
         if arguments['<version>']:

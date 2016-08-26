@@ -6,6 +6,7 @@ Script to deploy Lambda functions to AWS
 
 from __future__ import print_function
 import sys
+import os, shutil
 import subprocess
 import uuid
 import time
@@ -661,6 +662,22 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
                'with alias %s' % alias_name)
     monitoring.slacker_notification('systemmessages', message, slack_token)
     return 0
+
+def cleanup_bundle():
+    """
+    Deletes files used for creating bundle.
+        * vendored/*
+        * bundle.zip
+    :return: exit code for deleting files
+    """
+    paths = ['./vendored', './bundle.zip']
+    for path in paths:
+        if os.path.exists(path):
+            log.debug("Deleting %s..." % path)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
 
 
 def ping(function_name, alias_name=ALIAS_NAME, version=None):
