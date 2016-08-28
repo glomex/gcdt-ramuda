@@ -52,16 +52,16 @@ def are_credentials_still_valid():
 
 
 def get_user_config():
-    slack_tocken = read_gcdt_user_config(compatibility_mode='ramuda')
+    slack_tocken, slack_channel = read_gcdt_user_config(compatibility_mode='kumo')
     if not slack_tocken:
         sys.exit(1)
     else:
-        return slack_tocken
+        return slack_tocken, slack_channel
 
 
 def main():
     exit_code = 0
-    slack_token = get_user_config()
+    slack_token, slack_channel = get_user_config()
     arguments = docopt(DOC)
     if arguments['list']:
         are_credentials_still_valid()
@@ -94,7 +94,7 @@ def main():
     elif arguments['delete']:
         are_credentials_still_valid()
         exit_code = delete_lambda(arguments['<lambda>'],
-                                  slack_token=slack_token)
+                                  slack_token=slack_token, slack_channel=slack_channel)
     elif arguments['wire']:
         are_credentials_still_valid()
         conf = read_lambda_config()
@@ -102,7 +102,7 @@ def main():
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
         time_event_sources = conf.get('lambda.events.timeSchedules', [])
         exit_code = wire(function_name, s3_event_sources, time_event_sources,
-                         slack_token=slack_token)
+                         slack_token=slack_token, slack_channel=slack_channel)
     elif arguments['unwire']:
         are_credentials_still_valid()
         conf = read_lambda_config()
@@ -110,7 +110,7 @@ def main():
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
         time_event_sources = conf.get('lambda.events.timeSchedules', [])
         exit_code = unwire(function_name, s3_event_sources, time_event_sources,
-                           slack_token=slack_token)
+                           slack_token=slack_token, slack_channel=slack_channel)
     elif arguments['bundle']:
         conf = read_lambda_config()
         handler_filename = conf.get('lambda.handlerFile')
@@ -121,10 +121,10 @@ def main():
         if arguments['<version>']:
             exit_code = rollback(arguments['<lambda>'], 'ACTIVE',
                                  arguments['<version>'],
-                                 slack_token=slack_token)
+                                 slack_token=slack_token, slack_channel=slack_channel)
         else:
             exit_code = rollback(arguments['<lambda>'], 'ACTIVE',
-                                 slack_token=slack_token)
+                                 slack_token=slack_token, slack_channel=slack_channel)
     elif arguments['ping']:
         are_credentials_still_valid()
         if arguments['<version>']:
