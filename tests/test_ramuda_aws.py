@@ -24,9 +24,6 @@ from .helpers_aws import create_bucket, delete_bucket, create_role_helper, \
     delete_role_helper, create_lambda_helper, create_lambda_role_helper
 
 log = setup_logger(logger_name='ramuda_test_aws')
-# TODO: remove the slack token (see mail)
-#SLACK_TOKEN =
-
 # TODO: refactor tests to clean up lambda functions in case of failure
 # TODO: speedup tests by reusing lambda functions where possible
 # TODO: move AWS resource helpers to helpers_aws.py
