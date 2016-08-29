@@ -61,7 +61,6 @@ def get_user_config():
 
 def main():
     exit_code = 0
-    slack_token, slack_channel = get_user_config()
     arguments = docopt(DOC)
     if arguments['list']:
         are_credentials_still_valid()
@@ -73,6 +72,7 @@ def main():
         exit_code = get_metrics(arguments['<lambda>'])
     elif arguments['deploy']:
         are_credentials_still_valid()
+        slack_token, slack_channel = get_user_config()
         conf = read_lambda_config()
         lambda_name = conf.get('lambda.name')
         lambda_description = conf.get('lambda.description')
@@ -93,10 +93,12 @@ def main():
                                   artifact_bucket=artifact_bucket)
     elif arguments['delete']:
         are_credentials_still_valid()
+        slack_token, slack_channel = get_user_config()
         exit_code = delete_lambda(arguments['<lambda>'],
                                   slack_token=slack_token, slack_channel=slack_channel)
     elif arguments['wire']:
         are_credentials_still_valid()
+        slack_token, slack_channel = get_user_config()
         conf = read_lambda_config()
         function_name = conf.get('lambda.name')
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
@@ -105,6 +107,7 @@ def main():
                          slack_token=slack_token, slack_channel=slack_channel)
     elif arguments['unwire']:
         are_credentials_still_valid()
+        slack_token, slack_channel = get_user_config()
         conf = read_lambda_config()
         function_name = conf.get('lambda.name')
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
@@ -118,6 +121,7 @@ def main():
         exit_code = bundle_lambda(handler_filename, folders_from_file)
     elif arguments['rollback']:
         are_credentials_still_valid()
+        slack_token, slack_channel = get_user_config()
         if arguments['<version>']:
             exit_code = rollback(arguments['<lambda>'], 'ACTIVE',
                                  arguments['<version>'],
