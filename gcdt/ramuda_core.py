@@ -18,7 +18,8 @@ from clint.textui import colored
 from gcdt import monitoring
 from gcdt.ramuda_utils import make_zip_file_bytes, json2table, s3_upload, \
     lambda_exists, create_sha256, get_remote_code_hash, unit, \
-    aggregate_datapoints, check_buffer_exceeds_limit, list_of_dict_equals
+    aggregate_datapoints, check_buffer_exceeds_limit, list_of_dict_equals, \
+    create_aws_s3_arn, return_bucket_from_s3_arn, get_rule_name_from_event_arn
 from gcdt.logger import setup_logger
 
 log = setup_logger(logger_name='ramuda_core')
@@ -89,8 +90,6 @@ def _lambda_add_time_schedule_event_source(rule_name, rule_description,
         Description=rule_description,
     )
     rule_response = client.describe_rule(Name=rule_name)
-    print("RULE: {}".format(rule_name))
-    print(json.dumps(rule_response, indent=2))
     if rule_response is not None:
         client.put_targets(
             Rule=rule_name,
@@ -131,7 +130,7 @@ def _lambda_add_s3_event_source(arn, event, bucket, prefix, suffix):
     :param suffix:
     :return:
     """
-    filter_rule = None
+    filter_rules = []
     json_data = {
         'LambdaFunctionConfigurations': [{
             'LambdaFunctionArn': arn,
@@ -140,38 +139,39 @@ def _lambda_add_s3_event_source(arn, event, bucket, prefix, suffix):
         }]
     }
 
-    if prefix is not None and suffix is not None:
-        raise Exception('Only select suffix or prefix')
-
-    if prefix is not None:
-        filter_rule = {
-            'Name': 'Prefix',
-            'Value': prefix
-        }
-
-    if suffix is not None:
-        filter_rule = {
-            'Name': 'Suffix',
-            'Value': suffix
-        }
+    # if prefix is not None and suffix is not None:
+    #     raise Exception('Only select suffix or prefix')
+    filter_rules = _build_filter_rules(prefix, suffix)
 
     json_data['LambdaFunctionConfigurations'][0].update({
         'Filter': {
             'Key': {
-                'FilterRules': [
-                    filter_rule
-                ]
+                'FilterRules': filter_rules
             }
         }
     })
-
     # http://docs.aws.amazon.com/cli/latest/reference/s3api/put-bucket-notification-configuration.html
     # http://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html
-    s3 = boto3.resource('s3')
-    bucket_notification = s3.BucketNotification(bucket)
+    s3_resource = boto3.resource('s3')
+    s3_client = boto3.client('s3')
+
+    bucket_notification = s3_resource.BucketNotification(bucket)
+    bucket_configurations = s3_client.get_bucket_notification_configuration(Bucket=bucket)
+    bucket_configurations.pop('ResponseMetadata')
+
+    if 'LambdaFunctionConfigurations' in bucket_configurations:
+        bucket_configurations['LambdaFunctionConfigurations'].append(
+            json_data['LambdaFunctionConfigurations'][0]
+        )
+
+    else:
+        bucket_configurations['LambdaFunctionConfigurations'] = [
+            json_data['LambdaFunctionConfigurations'][0]
+        ]
     response = bucket_notification.put(
-        NotificationConfiguration=json_data
+        NotificationConfiguration=bucket_configurations
     )
+    bucket_notification.reload()
     return json2table(response)
 
 
@@ -551,6 +551,23 @@ def delete_lambda(function_name, slack_token=None):
     monitoring.slacker_notification('systemmessages', message, slack_token)
     return 0
 
+def _build_filter_rules(prefix, suffix):
+    filter_rules = []
+    if prefix:
+        filter_rules.append(
+            {
+                'Name': 'Prefix',
+                'Value': prefix
+            }
+        )
+    if suffix:
+        filter_rules.append(
+            {
+                'Name': 'Suffix',
+                'Value': suffix
+            }
+        )
+    return filter_rules
 
 def info(function_name, s3_event_sources=None, time_event_sources=None, alias_name=ALIAS_NAME):
     if not lambda_exists(function_name):
@@ -595,14 +612,16 @@ def info(function_name, s3_event_sources=None, time_event_sources=None, alias_na
 
             bucket_notification = client_s3.BucketNotification(bucket_name)
             bucket_notification.load()
-
+            filter_rules = _build_filter_rules(s3_event_source.get('prefix', None),s3_event_source.get('suffix', None))
             response = client_s3_alt.get_bucket_notification_configuration(Bucket=bucket_name)
             if 'LambdaFunctionConfigurations' in response:
                 relevant_configs, irrelevant_configs = filter_bucket_notifications_with_arn(response['LambdaFunctionConfigurations'],
-                                                                                            lambda_arn)
+                                                                                            lambda_arn, filter_rules)
                 if len(relevant_configs) > 0:
                     for config in relevant_configs:
-                        print('\t\t->{}'.format(config['LambdaFunctionArn']))
+                        print('\t\t{}:'.format(config['Events'][0]))
+                        for rule in config['Filter']['Key']['FilterRules']:
+                            print('\t\t{}: {}'.format(rule['Name'], rule['Value']))
                 else:
                     print('\tNot attached')
 
@@ -640,7 +659,6 @@ def filter_bucket_notifications_with_arn(lambda_function_configurations, lambda_
     for notification in lambda_function_configurations:
         if notification["LambdaFunctionArn"] == lambda_arn:
             if filter_rules:
-                print(json.dumps(notification, indent=2))
                 existing_filter = notification['Filter']['Key']['FilterRules']
                 if list_of_dict_equals(filter_rules, existing_filter):
                     matching_notifications.append(notification)
@@ -657,7 +675,6 @@ def ensure_s3_event(s3_event_source, function_name, alias_name, target_lambda_ar
     if not ensure in ENSURE_OPTIONS:
         print("{} is invalid ensure option, should be {}".format(ensure, ENSURE_OPTIONS))
 
-    resource_s3 = boto3.resource('s3')
     client_s3 = boto3.client('s3')
 
     bucket_name = s3_event_source.get('bucket')
@@ -665,25 +682,9 @@ def ensure_s3_event(s3_event_source, function_name, alias_name, target_lambda_ar
     prefix = s3_event_source.get('prefix', None)
     suffix = s3_event_source.get('suffix', None)
 
-    if prefix and suffix:
-        print("Rule {} -> {} has both prefix and suffix defined,")
-        sys.exit(1)
     rule_exists = False
-    filter_rules = []
-    if prefix:
-        filter_rules.append(
-            {
-                'Name': 'Prefix',
-                'Value': prefix
-            }
-        )
-    if suffix:
-        filter_rules.append(
-            {
-                'Name': 'Suffix',
-                'Value': suffix
-            }
-        )
+    filter_rules = _build_filter_rules(prefix, suffix)
+
     bucket_configurations = client_s3.get_bucket_notification_configuration(Bucket=bucket_name)
     bucket_configurations.pop('ResponseMetadata')
     matching_notifications, not_matching_notifications = filter_bucket_notifications_with_arn(
@@ -703,18 +704,24 @@ def ensure_s3_event(s3_event_source, function_name, alias_name, target_lambda_ar
         if policies:
             for statement in policies['Statement']:
                 if statement['Principal']['Service'] == 's3.amazonaws.com':
-                    permission_bucket = _return_bucket_from_s3_arn(statement['Condition']['ArnLike']['AWS:SourceArn'])
+                    permission_bucket = return_bucket_from_s3_arn(statement['Condition']['ArnLike']['AWS:SourceArn'])
                     if permission_bucket==bucket_name:
                         permission_exists=statement['Sid']
                         break
 
     if not rule_exists and not permission_exists:
         if ensure=="exists":
+            print("\tWireing rule {}: {}".format(bucket_name, event_type))
+            for rule in filter_rules:
+                print('\t\t{}: {}'.format(rule['Name'], rule['Value']))
             _wire_s3_to_lambda(s3_event_source, function_name, target_lambda_arn)
         elif ensure=="absent":
             return 0
     if rule_exists and permission_exists:
         if ensure=="absent":
+            print("\tRemoving rule {}: {}".format(bucket_name, event_type))
+            for rule in filter_rules:
+                print('\t\t{}: {}'.format(rule['Name'], rule['Value']))
             _remove_permission(function_name, permission_exists, alias_name, boto3.client('lambda'))
             _remove_events_from_s3_bucket(bucket_name, target_lambda_arn, filter_rules)
 
@@ -731,11 +738,14 @@ def _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, 
 
     rule_exists = False
     schedule_expression_match = False
+    not_matching_schedule_expression = None
     try:
         rule_response = client_event.describe_rule(Name=rule_name)
         rule_exists = True
         if rule_response['ScheduleExpression'] == schedule_expression:
             schedule_expression_match = True
+        else:
+            not_matching_schedule_expression = rule_response['ScheduleExpression']
     except ClientError as e:
         if e.response['Error']['Code'] == 'ResourceNotFoundException':
             pass
@@ -748,15 +758,14 @@ def _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, 
         if policies:
             for statement in policies['Statement']:
                 if statement['Principal']['Service'] == 'events.amazonaws.com':
-                    event_source_arn = _get_rule_name_from_event_arn(statement['Condition']['ArnLike']['AWS:SourceArn'])
+                    event_source_arn = get_rule_name_from_event_arn(statement['Condition']['ArnLike']['AWS:SourceArn'])
                     if rule_name == event_source_arn:
                         permission_exists = statement['Sid']
                         break
-    print("Ensure: rule {} and permission {} ".format(("exists" if rule_exists else "doesn't exists"),
-                                                      ("exists" if permission_exists else "doesn't exists")))
 
     if not rule_exists and not permission_exists:
         if ensure == 'exists':
+            print("\tWireing Cloudwatch event {}\n\t\t{}".format(rule_name, schedule_expression))
             rule_arn = _lambda_add_time_schedule_event_source(
                 rule_name, rule_description, schedule_expression, lambda_arn)
             _lambda_add_invoke_permission(
@@ -768,17 +777,18 @@ def _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, 
             if schedule_expression_match:
                 return 0
             else:
+                print("\t Updating Cloudwatch event {}\n\t\tOld: {}\n\t\tTo: {}".format(rule_name,
+                                                                                        not_matching_schedule_expression,
+                                                                                        schedule_expression))
                 rule_arn = _lambda_add_time_schedule_event_source(
                     rule_name, rule_description, schedule_expression, lambda_arn)
         if ensure == 'absent':
-            print('\tRemoving Cloudwatch permission {} invoking {}'.format(rule_name, lambda_arn))
+            print("\tRemoving rule {}\n\t\t{}".format(rule_name, schedule_expression))
             _remove_permission(function_name, statement['Sid'], alias_name, boto3.client('lambda'))
-            print('\tRemoving Cloudwatch rule {} invoking {}'.format(rule_name, lambda_arn))
             _remove_cloudwatch_rule_event(rule_name, lambda_arn)
 
 
 def _wire_s3_to_lambda(s3_event_source, function_name, target_lambda_arn):
-    print("_wire ")
     bucket_name = s3_event_source.get('bucket')
     event_type = s3_event_source.get('type')
     prefix = s3_event_source.get('prefix', None)
@@ -808,7 +818,8 @@ def wire(function_name, s3_event_sources=None, time_event_sources=None,
     lambda_function = lambda_client.get_function(FunctionName=function_name)
     lambda_arn = lambda_client.get_alias(FunctionName=function_name,
                                          Name=alias_name)['AliasArn']
-    print('wiring lambda_arn %s ' % lambda_arn)
+    print('wiring lambda_arn %s ...' % lambda_arn)
+
     if lambda_function is not None:
         for s3_event_source in s3_event_sources:
             if 'ensure' in s3_event_source:
@@ -817,10 +828,6 @@ def wire(function_name, s3_event_sources=None, time_event_sources=None,
                 ensure_s3_event(s3_event_source, function_name, alias_name, lambda_arn, ensure='exists')
 
         for time_event in time_event_sources:
-
-            rule_name = time_event.get('ruleName')
-            rule_description = time_event.get('ruleDescription')
-            schedule_expression = time_event.get('scheduleExpression')
             if 'ensure' in time_event:
                 _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, time_event['ensure'])
             else:
@@ -830,18 +837,6 @@ def wire(function_name, s3_event_sources=None, time_event_sources=None,
     monitoring.slacker_notification('systemmessages', message, slack_token)
     return 0
 
-
-def _create_aws_s3_arn(bucket_name):
-    return 'arn:aws:s3:::' + bucket_name
-
-def _return_bucket_from_s3_arn(aws_s3_arn):
-    # "arn:aws:s3:::test-bucket-dp-723" mirrors _create_aws_s3_arn
-    return aws_s3_arn.split(':')[5]
-
-def _get_rule_name_from_event_arn(aws_event_arn):
-    # ex. 'arn:aws:events:eu-west-1:111537987451:rule/dp-preprod-test-dp-723-T1_fun2'
-    full_rule = aws_event_arn.split(':')[5]
-    return full_rule.split('/')[1]
 
 
 def _get_lambda_policies(function_name, alias_name):
@@ -894,7 +889,7 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
         if policies:
             for statement in policies['Statement']:
                 if statement['Principal']['Service'] == 's3.amazonaws.com':
-                    source_bucket = _return_bucket_from_s3_arn(statement['Condition']['ArnLike']['AWS:SourceArn'])
+                    source_bucket = return_bucket_from_s3_arn(statement['Condition']['ArnLike']['AWS:SourceArn'])
                     print('\tRemoving S3 permission {} invoking {}'.format(source_bucket, lambda_arn))
                     _remove_permission(function_name, statement['Sid'], alias_name, client_lambda)
                     print('\tRemoving All S3 events {} invoking {}'.format(source_bucket, lambda_arn))
@@ -911,7 +906,7 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
         if policies:
             for statement in policies['Statement']:
                 if statement['Principal']['Service'] == 'events.amazonaws.com':
-                    rule_name = _get_rule_name_from_event_arn(statement['Condition']['ArnLike']['AWS:SourceArn'])
+                    rule_name = get_rule_name_from_event_arn(statement['Condition']['ArnLike']['AWS:SourceArn'])
                     print('\tRemoving Cloudwatch permission {} invoking {}'.format(rule_name, lambda_arn))
                     _remove_permission(function_name, statement['Sid'], alias_name, client_lambda)
                     print('\tRemoving Cloudwatch rule {} invoking {}'.format(rule_name, lambda_arn))
