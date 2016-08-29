@@ -213,6 +213,11 @@ def get_remote_code_hash(function_name):
     response = client.get_function_configuration(FunctionName=function_name)
     return response['CodeSha256']
 
+def list_of_dict_equals(dict1, dict2):
+    for d in dict1:
+        if d not in dict2:
+            return False
+    return True
 
 def get_packages_to_ignore(folder, ramuda_ignore_file):
     if not ramuda_ignore_file:

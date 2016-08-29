@@ -99,6 +99,7 @@ def main():
         exit_code = delete_lambda(arguments['<lambda>'],
                                   slack_token=slack_token)
     elif arguments['info']:
+        are_credentials_still_valid()
         conf = read_lambda_config()
         function_name = conf.get('lambda.name')
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
