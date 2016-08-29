@@ -210,7 +210,7 @@ def create_sha256(code):
 def create_aws_s3_arn(bucket_name):
     return 'arn:aws:s3:::' + bucket_name
 
-def return_bucket_from_s3_arn(aws_s3_arn):
+def get_bucket_from_s3_arn(aws_s3_arn):
     # "arn:aws:s3:::test-bucket-dp-723" mirrors _create_aws_s3_arn
     return aws_s3_arn.split(':')[5]
 
@@ -233,6 +233,26 @@ def list_of_dict_equals(dict1, dict2):
     else:
         return False
     return True
+
+
+def build_filter_rules(prefix, suffix):
+    filter_rules = []
+    if prefix:
+        filter_rules.append(
+            {
+                'Name': 'Prefix',
+                'Value': prefix
+            }
+        )
+    if suffix:
+        filter_rules.append(
+            {
+                'Name': 'Suffix',
+                'Value': suffix
+            }
+        )
+    return filter_rules
+
 
 def get_packages_to_ignore(folder, ramuda_ignore_file):
     if not ramuda_ignore_file:

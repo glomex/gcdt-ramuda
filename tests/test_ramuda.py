@@ -18,7 +18,9 @@ from testfixtures import LogCapture
 from .helpers import with_setup_args, create_tempfile, get_size
 from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda
 from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
-    aggregate_datapoints, json2table, create_sha256, ProgressPercentage
+    aggregate_datapoints, json2table, create_sha256, ProgressPercentage, \
+    list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, get_bucket_from_s3_arn, \
+    build_filter_rules
 from gcdt.logger import setup_logger
 
 log = setup_logger(logger_name='ramuda_test')
@@ -238,6 +240,58 @@ def test_create_sha256():
     expected = 'SM6siXnsKAmQuG5egM0MYKgUU60nLFxUVeEvTcN4OFI='
     assert_equal(actual, expected)
 
+
+def test_create_s3_arn():
+    s3_arn = create_aws_s3_arn('dp-dev-not-existing')
+    assert_equal(s3_arn, 'arn:aws:s3:::dp-dev-not-existing')
+
+
+def test_get_bucket_name_from_s3_arn():
+    s3_arn = 'arn:aws:s3:::test-bucket-dp-723'
+    bucket_name = get_bucket_from_s3_arn(s3_arn)
+    assert_equal(bucket_name, 'test-bucket-dp-723')
+
+
+def test_get_rule_name_from_event_arn():
+    rule_arn = 'arn:aws:events:eu-west-1:111537987451:rule/dp-preprod-test-dp-723-T1_fun2'
+    rule_name = get_rule_name_from_event_arn(rule_arn)
+    assert_equal(rule_name, 'dp-preprod-test-dp-723-T1_fun2')
+
+
+def test_list_of_dicts():
+    list_1 = [
+        {"key1" : "value1"},
+        {"key2" : "value2"},
+        {"key3" : "value3"},
+    ]
+    list_2 = [
+        {"key1" : "value1"},
+        {"key2" : "value2"},
+        {"key3" : "value3"},
+    ]
+    list_3 = [
+        {"key1" : "value1"},
+        {"key2" : "value2"},
+    ]
+    equals_1 = list_of_dict_equals(list_1, list_2)
+    assert_true(equals_1)
+    equals_2 = list_of_dict_equals(list_1, list_3)
+    assert_false(equals_2)
+
+
+def test_build_filter_rules():
+    prefix = 'folder'
+    suffix = '.gz'
+    rules = build_filter_rules(prefix, suffix)
+
+    rules_hardcoded = [
+        { 'Name': 'Prefix',
+          'Value': 'folder'},
+        {'Name': 'Suffix',
+         'Value': '.gz'}
+    ]
+    match = list_of_dict_equals(rules, rules_hardcoded)
+    assert_true(match)
 
 def test_progress_percentage():
     class ProgressCallbackInvoker(BaseSubscriber):
