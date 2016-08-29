@@ -286,7 +286,8 @@ def deploy_lambda(function_name, role, handler_filename, handler_function,
 def _create_lambda(function_name, role, handler_filename, handler_function,
                    folders, description, timeout, memory,
                    subnet_ids=None, security_groups=None,
-                   artifact_bucket=None, zipfile=None, slack_token=None):
+                   artifact_bucket=None, zipfile=None, slack_token=None,
+                   slack_channel='systemmessages'):
     log.debug('create lambda function: %s' % function_name)
     # move to caller!_create_lambda
     # _install_dependencies_with_pip('requirements.txt', './vendored')
@@ -336,7 +337,6 @@ def _create_lambda(function_name, role, handler_filename, handler_function,
         return
 
     function_version = response['Version']
-    print(response)
     print(json2table(response))
     # FIXME: 23.08.2016 WHY update configuration after create?
     # timing issue:
@@ -350,14 +350,14 @@ def _create_lambda(function_name, role, handler_filename, handler_function,
                                  description, timeout, memory, subnet_ids,
                                  security_groups)
     message = 'ramuda bot: created new lambda function: %s ' % function_name
-    monitoring.slacker_notification('systemmessages', message, slack_token)
+    monitoring.slack_notification(slack_channel, message, slack_token)
     return function_version
 
 
 def _update_lambda(function_name, handler_filename, handler_function, folders,
                    role, description, timeout, memory, subnet_ids=None,
                    security_groups=None, artifact_bucket=None,
-                   slack_token=None):
+                   slack_token=None, slack_channel='systemmessages'):
     log.debug('update lambda function: %s' % function_name)
     _update_lambda_function_code(function_name, handler_filename, folders,
                                  artifact_bucket=artifact_bucket)
@@ -366,7 +366,7 @@ def _update_lambda(function_name, handler_filename, handler_function, folders,
                                      description, timeout, memory, subnet_ids,
                                      security_groups)
     message = 'ramuda bot: updated lambda function: %s ' % function_name
-    monitoring.slacker_notification('systemmessages', message, slack_token)
+    monitoring.slack_notification(slack_channel, message, slack_token)
     return function_version
 
 
@@ -500,13 +500,14 @@ def get_metrics(name, out=sys.stdout):
 
 
 def rollback(function_name, alias_name=ALIAS_NAME, version=None,
-             slack_token=None):
+             slack_token=None, slack_channel='systemmessages'):
     """Rollback a lambda function to a given version.
 
     :param function_name:
     :param alias_name:
     :param version:
     :param slack_token:
+    :param slack_channel:
     :return: exit_code
     """
     if version:
@@ -516,7 +517,7 @@ def rollback(function_name, alias_name=ALIAS_NAME, version=None,
         _update_alias(function_name, version, alias_name)
         message = ('ramuda bot: rolled back lambda function: ' +
                    '%s to version %s' % (function_name, version))
-        monitoring.slacker_notification('systemmessages', message, slack_token)
+        monitoring.slack_notification(slack_channel, message, slack_token)
     else:
         print('rolling back to previous version')
         client = boto3.client('lambda')
@@ -533,15 +534,16 @@ def rollback(function_name, alias_name=ALIAS_NAME, version=None,
 
         message = ('ramuda bot: rolled back lambda function: %s to ' +
                    'previous version') % function_name
-        monitoring.slacker_notification('systemmessages', message, slack_token)
+        monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
-def delete_lambda(function_name, slack_token=None):
+def delete_lambda(function_name, slack_token=None, slack_channel='systemmessages'):
     """Delete a lambda function.
 
     :param function_name:
     :param slack_token:
+    :param slack_channel:
     :return: exit_code
     """
     client = boto3.client('lambda')
@@ -549,7 +551,7 @@ def delete_lambda(function_name, slack_token=None):
     # TODO remove event source first and maybe also needed for permissions
     print(json2table(response))
     message = 'ramuda bot: deleted lambda function: %s' % function_name
-    monitoring.slacker_notification('systemmessages', message, slack_token)
+    monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
@@ -784,7 +786,7 @@ def _wire_s3_to_lambda(s3_event_source, function_name, target_lambda_arn):
 
 
 def wire(function_name, s3_event_sources=None, time_event_sources=None,
-         alias_name=ALIAS_NAME, slack_token=None):
+         alias_name=ALIAS_NAME, slack_token=None, slack_channel='systemmessages'):
     """Wiring a lambda function to events.
 
     :param function_name:
@@ -792,6 +794,7 @@ def wire(function_name, s3_event_sources=None, time_event_sources=None,
     :param time_event_sources:
     :param alias_name:
     :param slack_token:
+    :param slack_channel:
     :return: exit_code
     """
     if not lambda_exists(function_name):
@@ -818,7 +821,7 @@ def wire(function_name, s3_event_sources=None, time_event_sources=None,
                 _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, ensure='exists')
     message = ('ramuda bot: wiring lambda function: ' +
                '%s with alias %s' % (function_name, alias_name))
-    monitoring.slacker_notification('systemmessages', message, slack_token)
+    monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
@@ -837,7 +840,7 @@ def _get_lambda_policies(function_name, alias_name):
     return policies
 
 def unwire(function_name, s3_event_sources=None, time_event_sources=None,
-           alias_name=ALIAS_NAME, slack_token=None):
+           alias_name=ALIAS_NAME, slack_token=None, slack_channel='systemmessages'):
     """Unwire an event from a lambda function.
 
     :param function_name:
@@ -845,6 +848,7 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
     :param time_event_sources:
     :param alias_name:
     :param slack_token:
+    :param slack_channel:
     :return: exit_code
     """
     if not lambda_exists(function_name):
@@ -903,7 +907,7 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
 
     message = ('ramuda bot: UN-wiring lambda function: %s ' % function_name +
                'with alias %s' % alias_name)
-    monitoring.slacker_notification('systemmessages', message, slack_token)
+    monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
