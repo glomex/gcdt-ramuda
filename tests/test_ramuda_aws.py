@@ -25,7 +25,7 @@ from .helpers_aws import create_bucket, delete_bucket, create_role_helper, \
 
 log = setup_logger(logger_name='ramuda_test_aws')
 # TODO: remove the slack token (see mail)
-SLACK_TOKEN = '***REMOVED***'
+#SLACK_TOKEN =
 
 # TODO: refactor tests to clean up lambda functions in case of failure
 # TODO: speedup tests by reusing lambda functions where possible
@@ -444,8 +444,7 @@ def test_wire_unwire_lambda_with_s3(cwd, temp_files, temp_roles):
     # wire the function with the bucket
     s3_event_sources = conf.get('lambda.events.s3Sources', [])
     time_event_sources = conf.get('lambda.events.timeSchedules', [])
-    exit_code = wire(lambda_name, s3_event_sources, time_event_sources,
-                     slack_token=SLACK_TOKEN)
+    exit_code = wire(lambda_name, s3_event_sources, time_event_sources)
     assert_equal(exit_code, 0)
 
     # put a file into the bucket
@@ -461,8 +460,7 @@ def test_wire_unwire_lambda_with_s3(cwd, temp_files, temp_roles):
     assert_equal(int(_get_count(lambda_name)), 1)
 
     # unwire the function
-    exit_code = unwire(lambda_name, s3_event_sources, time_event_sources,
-                       slack_token=SLACK_TOKEN)
+    exit_code = unwire(lambda_name, s3_event_sources, time_event_sources)
     assert_equal(exit_code, 0)
 
     # put in another file
@@ -626,8 +624,7 @@ def test_rollback(cwd, temp_files, temp_roles):
     alias_version = _get_alias_version(lambda_name, 'ACTIVE')
     assert_equal(alias_version, '$LATEST')
 
-    rollback(lambda_name, alias_name='ACTIVE', version='1',
-             slack_token=SLACK_TOKEN)
+    rollback(lambda_name, alias_name='ACTIVE', version='1')
 
     # we rolled back to function_version 1
     alias_version = _get_alias_version(lambda_name, 'ACTIVE')
