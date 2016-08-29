@@ -253,24 +253,6 @@ def cleanup_folder(path, ramuda_ignore_file=None):
             os.remove(path + '/' + folder)
 
 
-def read_ramuda_config(config_file=None):  # TODO: turn this into .gcdt config
-    """Read .ramuda config file from user home.
-
-    :return: pyhocon configuration, exit_code
-    """
-    if not config_file:
-        config_file = os.path.expanduser('~') + '/' + '.ramuda'
-    try:
-        config = ConfigFactory.parse_file(config_file)
-        return config, 0
-    except Exception as e:
-        print(e)
-        print(colored.red('Cannot find file .ramuda in your home directory %s'
-                          % config_file))
-        print(colored.red('Please run "ramuda configure"'))
-        return None, 1
-
-
 class ProgressPercentage(object):
     def __init__(self, filename, out=sys.stdout):
         self._filename = filename
