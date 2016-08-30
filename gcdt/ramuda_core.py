@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timedelta
 import boto3
 import json
-from textwrap import TextWrapper
+from clint.textui import colored, prompt
 from botocore.exceptions import ClientError as ClientError
 from clint.textui import colored
 from gcdt import monitoring
@@ -698,17 +698,17 @@ def _ensure_s3_event(s3_event_source, function_name, alias_name, target_lambda_a
 
     if not rule_exists and not permission_exists:
         if ensure == "exists":
-            print("\tWiring rule {}: {}".format(bucket_name, event_type))
+            print(colored.magenta("\tWiring rule {}: {}".format(bucket_name, event_type)))
             for rule in filter_rules:
-                print('\t\t{}: {}'.format(rule['Name'], rule['Value']))
+                print(colored.magenta('\t\t{}: {}'.format(rule['Name'], rule['Value'])))
             _wire_s3_to_lambda(s3_event_source, function_name, target_lambda_arn)
         elif ensure == "absent":
             return 0
     if rule_exists and permission_exists:
         if ensure == "absent":
-            print("\tRemoving rule {}: {}".format(bucket_name, event_type))
+            print(colored.magenta("\tRemoving rule {}: {}".format(bucket_name, event_type)))
             for rule in filter_rules:
-                print('\t\t{}: {}'.format(rule['Name'], rule['Value']))
+                print(colored.magenta('\t\t{}: {}'.format(rule['Name'], rule['Value'])))
             _remove_permission(function_name, permission_exists, alias_name, boto3.client('lambda'))
             _remove_events_from_s3_bucket(bucket_name, target_lambda_arn, filter_rules)
 
@@ -751,7 +751,7 @@ def _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, 
 
     if not rule_exists and not permission_exists:
         if ensure == 'exists':
-            print("\tWiring Cloudwatch event {}\n\t\t{}".format(rule_name, schedule_expression))
+            print(colored.magenta("\tWiring Cloudwatch event {}\n\t\t{}".format(rule_name, schedule_expression)))
             rule_arn = _lambda_add_time_schedule_event_source(
                 rule_name, rule_description, schedule_expression, lambda_arn)
             _lambda_add_invoke_permission(
@@ -763,13 +763,13 @@ def _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, 
             if schedule_expression_match:
                 return 0
             else:
-                print("\t Updating Cloudwatch event {}\n\t\tOld: {}\n\t\tTo: {}".format(rule_name,
+                print(colored.magenta("\t Updating Cloudwatch event {}\n\t\tOld: {}\n\t\tTo: {}".format(rule_name,
                                                                                         not_matching_schedule_expression,
-                                                                                        schedule_expression))
+                                                                                        schedule_expression)))
                 rule_arn = _lambda_add_time_schedule_event_source(
                     rule_name, rule_description, schedule_expression, lambda_arn)
         if ensure == 'absent':
-            print("\tRemoving rule {}\n\t\t{}".format(rule_name, schedule_expression))
+            print(colored.magenta("\tRemoving rule {}\n\t\t{}".format(rule_name, schedule_expression)))
             _remove_permission(function_name, statement['Sid'], alias_name, boto3.client('lambda'))
             _remove_cloudwatch_rule_event(rule_name, lambda_arn)
 
@@ -836,7 +836,7 @@ def filter_events_ensure(event_sources):
             elif event['ensure'] == 'absent':
                 events_ensure_absent.append(event)
             else:
-                print('Ensure must be one of {}, currently set to {}'.format(ENSURE_OPTIONS, event['ensure']))
+                print(colored.red('Ensure must be one of {}, currently set to {}'.format(ENSURE_OPTIONS, event['ensure'])))
                 sys.exit(1)
         else:
             event['ensure'] = 'exists'
@@ -852,7 +852,7 @@ def _get_lambda_policies(function_name, alias_name):
         policies = json.loads(result['Policy'])
     except ClientError as e:
         if e.response['Error']['Code'] == 'ResourceNotFoundException':
-            print("Permission policies not found")
+            print(colored.red("Permission policies not found"))
         else:
             raise e
     return policies
