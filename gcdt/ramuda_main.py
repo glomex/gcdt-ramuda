@@ -13,7 +13,7 @@ from gcdt import utils
 from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
     wire, bundle_lambda, unwire, delete_lambda, rollback, ping
-from gcdt.utils import read_gcdt_user_config, get_context
+from gcdt.utils import read_gcdt_user_config, get_context, get_command
 from gcdt.monitoring import datadog_notification, datadog_error
 
 log = setup_logger(logger_name='ramuda')
@@ -63,7 +63,11 @@ def get_user_config():
 def main():
     exit_code = 0
     arguments = docopt(DOC)
-    context = get_context('ramuda', arguments[0])
+    if arguments['version']:
+        utils.version()
+        sys.exit(0)
+
+    context = get_context('ramuda', get_command(arguments))
     datadog_notification(context)
 
     if arguments['list']:
@@ -139,8 +143,6 @@ def main():
             ping(arguments['<lambda>'], version=arguments['<version>'])
         else:
             ping(arguments['<lambda>'])
-    elif arguments['version']:
-        utils.version()
 
     if exit_code:
         datadog_error(context)
