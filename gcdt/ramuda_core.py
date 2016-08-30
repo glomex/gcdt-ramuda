@@ -162,14 +162,11 @@ def _lambda_add_s3_event_source(arn, event, bucket, prefix, suffix):
         bucket_configurations['LambdaFunctionConfigurations'].append(
             json_data['LambdaFunctionConfigurations'][0]
         )
-
     else:
-        bucket_configurations['LambdaFunctionConfigurations'] = [
-            json_data['LambdaFunctionConfigurations'][0]
-        ]
-    response = bucket_notification.put(
-        NotificationConfiguration=bucket_configurations
-    )
+        bucket_configurations['LambdaFunctionConfigurations'] = json_data['LambdaFunctionConfigurations']
+
+    response =  put_s3_lambda_notifications(bucket_configurations, bucket_notification)
+
     bucket_notification.reload()
 
     bucket_configurations = s3_client.get_bucket_notification_configuration(Bucket=bucket)
@@ -217,7 +214,6 @@ def list_functions(out=sys.stdout):
         print('\t' 'CodeSha256: ' + str(function['CodeSha256']), file=out)
 
         print('\n', file=out)
-        # print json.dumps(response, indent=4)
     return 0
 
 
