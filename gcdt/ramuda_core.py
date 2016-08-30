@@ -534,7 +534,7 @@ def rollback(function_name, alias_name=ALIAS_NAME, version=None,
     return 0
 
 
-def delete_lambda(function_name, s3_event_sources=None, time_event_sources=None, alias_name=ALIAS_NAME,
+def delete_lambda(function_name, s3_event_sources=[], time_event_sources=[],
                   slack_token=None, slack_channel='systemmessages'):
     """Delete a lambda function.
 
