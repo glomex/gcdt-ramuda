@@ -7,7 +7,7 @@ Script to deploy Lambda functions to AWS
 
 from __future__ import print_function
 import sys
-from glomex_utils.config_reader import read_lambda_config
+from glomex_utils.config_reader import read_lambda_config, read_config_if_exists
 from docopt import docopt
 from gcdt import utils
 from gcdt.logger import setup_logger
@@ -103,8 +103,8 @@ def main():
     elif arguments['delete']:
         are_credentials_still_valid()
         slack_token, slack_channel = get_user_config()
-        conf = read_lambda_config()
-        function_name = conf.get('lambda.name')
+        conf = read_config_if_exists('lambda')
+        function_name = conf.get('lambda.name', None)
         if function_name == str(arguments['<lambda>']):
             s3_event_sources = conf.get('lambda.events.s3Sources', [])
             time_event_sources = conf.get('lambda.events.timeSchedules', [])
