@@ -13,7 +13,8 @@ from gcdt import utils
 from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
     wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info
-from utils import read_gcdt_user_config
+from gcdt.utils import read_gcdt_user_config, get_context, get_command
+from gcdt.monitoring import datadog_notification, datadog_error
 
 log = setup_logger(logger_name='ramuda')
 
@@ -26,7 +27,7 @@ log = setup_logger(logger_name='ramuda')
 # TODO retain only n versions
 
 # creating docopt parameters and usage help
-DOC = """Usage:
+DOC = '''Usage:
         ramuda bundle
         ramuda deploy
         ramuda list
@@ -41,7 +42,7 @@ DOC = """Usage:
 
 Options:
 -h --help           show this
-"""
+'''
 
 
 def are_credentials_still_valid():
@@ -63,6 +64,13 @@ def get_user_config():
 def main():
     exit_code = 0
     arguments = docopt(DOC)
+    if arguments['version']:
+        utils.version()
+        sys.exit(0)
+
+    context = get_context('ramuda', get_command(arguments))
+    datadog_notification(context)
+
     if arguments['list']:
         are_credentials_still_valid()
         exit_code = list_functions()
@@ -151,9 +159,9 @@ def main():
             ping(arguments['<lambda>'], version=arguments['<version>'])
         else:
             ping(arguments['<lambda>'])
-    elif arguments['version']:
-        utils.version()
 
+    if exit_code:
+        datadog_error(context)
     sys.exit(exit_code)
 
 
