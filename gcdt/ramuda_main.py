@@ -104,7 +104,7 @@ def main():
                                       slack_token=slack_token)
         else:
             exit_code = delete_lambda(arguments['<lambda>'], [], [],
-                                  slack_token=slack_token)
+                                      slack_token=slack_token)
     elif arguments['info']:
         are_credentials_still_valid()
         conf = read_lambda_config()

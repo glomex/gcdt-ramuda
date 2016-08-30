@@ -165,7 +165,7 @@ def _lambda_add_s3_event_source(arn, event, bucket, prefix, suffix):
     else:
         bucket_configurations['LambdaFunctionConfigurations'] = json_data['LambdaFunctionConfigurations']
 
-    response =  put_s3_lambda_notifications(bucket_configurations, bucket_notification)
+    response = put_s3_lambda_notifications(bucket_configurations, bucket_notification)
 
     bucket_notification.reload()
 
@@ -534,7 +534,7 @@ def rollback(function_name, alias_name=ALIAS_NAME, version=None,
     return 0
 
 
-def delete_lambda(function_name, s3_event_sources = None, time_event_sources = None, alias_name = ALIAS_NAME,
+def delete_lambda(function_name, s3_event_sources=None, time_event_sources=None, alias_name=ALIAS_NAME,
                   slack_token=None, slack_channel='systemmessages'):
     """Delete a lambda function.
 
@@ -543,10 +543,10 @@ def delete_lambda(function_name, s3_event_sources = None, time_event_sources = N
     :param slack_channel:
     :return: exit_code
     """
-    unwire(function_name, s3_event_sources=s3_event_sources, time_event_sources=time_event_sources, alias_name=ALIAS_NAME)
+    unwire(function_name, s3_event_sources=s3_event_sources, time_event_sources=time_event_sources,
+           alias_name=ALIAS_NAME)
     client = boto3.client('lambda')
     response = client.delete_function(FunctionName=function_name)
-
 
     # TODO remove event source first and maybe also needed for permissions
     print(json2table(response))
@@ -563,7 +563,7 @@ def info(function_name, s3_event_sources=None, time_event_sources=None, alias_na
 
     lambda_client = boto3.client('lambda')
     lambda_function = lambda_client.get_function(FunctionName=function_name)
-    lambda_alias = lambda_client.get_alias(FunctionName=function_name,Name=alias_name)
+    lambda_alias = lambda_client.get_alias(FunctionName=function_name, Name=alias_name)
     lambda_arn = lambda_alias['AliasArn']
 
     if lambda_function is not None:
@@ -598,11 +598,12 @@ def info(function_name, s3_event_sources=None, time_event_sources=None, alias_na
 
             bucket_notification = client_s3.BucketNotification(bucket_name)
             bucket_notification.load()
-            filter_rules = build_filter_rules(s3_event_source.get('prefix', None),s3_event_source.get('suffix', None))
+            filter_rules = build_filter_rules(s3_event_source.get('prefix', None), s3_event_source.get('suffix', None))
             response = client_s3_alt.get_bucket_notification_configuration(Bucket=bucket_name)
             if 'LambdaFunctionConfigurations' in response:
-                relevant_configs, irrelevant_configs = filter_bucket_notifications_with_arn(response['LambdaFunctionConfigurations'],
-                                                                                            lambda_arn, filter_rules)
+                relevant_configs, irrelevant_configs = filter_bucket_notifications_with_arn(
+                    response['LambdaFunctionConfigurations'],
+                    lambda_arn, filter_rules)
                 if len(relevant_configs) > 0:
                     for config in relevant_configs:
                         print('\t\t{}:'.format(config['Events'][0]))
@@ -612,9 +613,9 @@ def info(function_name, s3_event_sources=None, time_event_sources=None, alias_na
                     print('\tNot attached')
 
                     # TODO Beautify
-                    #wrapper = TextWrapper(initial_indent='\t', subsequent_indent='\t')
-                    #output = "\n".join(wrapper.wrap(json.dumps(config, indent=True)))
-                    #print(json.dumps(config, indent=True))
+                    # wrapper = TextWrapper(initial_indent='\t', subsequent_indent='\t')
+                    # output = "\n".join(wrapper.wrap(json.dumps(config, indent=True)))
+                    # print(json.dumps(config, indent=True))
             else:
                 print('\tNot attached')
 
@@ -639,7 +640,7 @@ def info(function_name, s3_event_sources=None, time_event_sources=None, alias_na
                     raise e
 
 
-def filter_bucket_notifications_with_arn(lambda_function_configurations, lambda_arn, filter_rules = False):
+def filter_bucket_notifications_with_arn(lambda_function_configurations, lambda_arn, filter_rules=False):
     matching_notifications = []
     not_matching_notifications = []
     for notification in lambda_function_configurations:
@@ -658,7 +659,7 @@ def filter_bucket_notifications_with_arn(lambda_function_configurations, lambda_
 
 
 def _ensure_s3_event(s3_event_source, function_name, alias_name, target_lambda_arn, ensure="exists"):
-    if not ensure in ENSURE_OPTIONS:
+    if ensure not in ENSURE_OPTIONS:
         print("{} is invalid ensure option, should be {}".format(ensure, ENSURE_OPTIONS))
 
     client_s3 = boto3.client('s3')
@@ -674,7 +675,7 @@ def _ensure_s3_event(s3_event_source, function_name, alias_name, target_lambda_a
     bucket_configurations = client_s3.get_bucket_notification_configuration(Bucket=bucket_name)
     bucket_configurations.pop('ResponseMetadata')
     matching_notifications, not_matching_notifications = filter_bucket_notifications_with_arn(
-        bucket_configurations.get('LambdaFunctionConfigurations',[]), target_lambda_arn, filter_rules)
+        bucket_configurations.get('LambdaFunctionConfigurations', []), target_lambda_arn, filter_rules)
 
     for config in matching_notifications:
         if config['Events'][0] == event_type:
@@ -686,31 +687,30 @@ def _ensure_s3_event(s3_event_source, function_name, alias_name, target_lambda_a
     # permissions_exists
     permission_exists = False
     if rule_exists:
-        policies =  _get_lambda_policies(function_name, alias_name)
+        policies = _get_lambda_policies(function_name, alias_name)
         if policies:
             for statement in policies['Statement']:
                 if statement['Principal']['Service'] == 's3.amazonaws.com':
                     permission_bucket = get_bucket_from_s3_arn(statement['Condition']['ArnLike']['AWS:SourceArn'])
-                    if permission_bucket==bucket_name:
-                        permission_exists=statement['Sid']
+                    if permission_bucket == bucket_name:
+                        permission_exists = statement['Sid']
                         break
 
     if not rule_exists and not permission_exists:
-        if ensure=="exists":
+        if ensure == "exists":
             print("\tWiring rule {}: {}".format(bucket_name, event_type))
             for rule in filter_rules:
                 print('\t\t{}: {}'.format(rule['Name'], rule['Value']))
             _wire_s3_to_lambda(s3_event_source, function_name, target_lambda_arn)
-        elif ensure=="absent":
+        elif ensure == "absent":
             return 0
     if rule_exists and permission_exists:
-        if ensure=="absent":
+        if ensure == "absent":
             print("\tRemoving rule {}: {}".format(bucket_name, event_type))
             for rule in filter_rules:
                 print('\t\t{}: {}'.format(rule['Name'], rule['Value']))
             _remove_permission(function_name, permission_exists, alias_name, boto3.client('lambda'))
             _remove_events_from_s3_bucket(bucket_name, target_lambda_arn, filter_rules)
-
 
 
 def _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, ensure='exists'):
@@ -740,7 +740,7 @@ def _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, 
 
     permission_exists = False
     if rule_exists:
-        policies =  _get_lambda_policies(function_name, alias_name)
+        policies = _get_lambda_policies(function_name, alias_name)
         if policies:
             for statement in policies['Statement']:
                 if statement['Principal']['Service'] == 'events.amazonaws.com':
@@ -831,9 +831,9 @@ def filter_events_ensure(event_sources):
     events_ensure_absent = []
     for event in event_sources:
         if 'ensure' in event:
-            if event['ensure']=='exists':
+            if event['ensure'] == 'exists':
                 events_ensure_exists.append(event)
-            elif event['ensure']=='absent':
+            elif event['ensure'] == 'absent':
                 events_ensure_absent.append(event)
             else:
                 print('Ensure must be one of {}, currently set to {}'.format(ENSURE_OPTIONS, event['ensure']))
@@ -856,6 +856,7 @@ def _get_lambda_policies(function_name, alias_name):
         else:
             raise e
     return policies
+
 
 def unwire(function_name, s3_event_sources=None, time_event_sources=None,
            alias_name=ALIAS_NAME, slack_token=None, slack_channel='systemmessages'):
@@ -921,7 +922,6 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
             rule_name = time_event.get('ruleName')
             _remove_cloudwatch_rule_event(rule_name, lambda_arn)
 
-
     message = ('ramuda bot: UN-wiring lambda function: %s ' % function_name +
                'with alias %s' % alias_name)
     monitoring.slack_notification(slack_channel, message, slack_token)
@@ -956,14 +956,15 @@ def _remove_cloudwatch_rule_event(rule_name, target_lambda_arn):
             Name=rule_name
         )
 
-def _remove_events_from_s3_bucket(bucket_name, target_lambda_arn, filter_rule = False):
+
+def _remove_events_from_s3_bucket(bucket_name, target_lambda_arn, filter_rule=False):
     resource_s3 = boto3.resource('s3')
     client_s3 = boto3.client('s3')
     bucket_notification = resource_s3.BucketNotification(bucket_name)
     bucket_configurations = client_s3.get_bucket_notification_configuration(Bucket=bucket_name)
     bucket_configurations.pop('ResponseMetadata')
     matching_notifications, not_matching_notifications = filter_bucket_notifications_with_arn( \
-        bucket_configurations.get('LambdaFunctionConfigurations',[]), target_lambda_arn, filter_rule)
+        bucket_configurations.get('LambdaFunctionConfigurations', []), target_lambda_arn, filter_rule)
     if not_matching_notifications:
         bucket_configurations['LambdaFunctionConfigurations'] = not_matching_notifications
     else:
@@ -972,8 +973,6 @@ def _remove_events_from_s3_bucket(bucket_name, target_lambda_arn, filter_rule = 
 
     response = put_s3_lambda_notifications(bucket_configurations, bucket_notification)
     bucket_configurations_2 = client_s3.get_bucket_notification_configuration(Bucket=bucket_name)
-
-
 
 
 def put_s3_lambda_notifications(configurations, bucket_notification):
