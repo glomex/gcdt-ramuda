@@ -95,7 +95,15 @@ def main():
     elif arguments['delete']:
         are_credentials_still_valid()
         slack_token, slack_channel = get_user_config()
-        exit_code = delete_lambda(arguments['<lambda>'],
+        conf = read_lambda_config()
+        function_name = conf.get('lambda.name')
+        if function_name == str(arguments['<lambda>']):
+            s3_event_sources = conf.get('lambda.events.s3Sources', [])
+            time_event_sources = conf.get('lambda.events.timeSchedules', [])
+            exit_code = delete_lambda(arguments['<lambda>'], s3_event_sources, time_event_sources,
+                                      slack_token=slack_token)
+        else:
+            exit_code = delete_lambda(arguments['<lambda>'], [], [],
                                   slack_token=slack_token)
     elif arguments['info']:
         are_credentials_still_valid()

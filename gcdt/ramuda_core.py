@@ -140,8 +140,6 @@ def _lambda_add_s3_event_source(arn, event, bucket, prefix, suffix):
         }]
     }
 
-    # if prefix is not None and suffix is not None:
-    #     raise Exception('Only select suffix or prefix')
     filter_rules = build_filter_rules(prefix, suffix)
 
     json_data['LambdaFunctionConfigurations'][0].update({
@@ -173,6 +171,8 @@ def _lambda_add_s3_event_source(arn, event, bucket, prefix, suffix):
         NotificationConfiguration=bucket_configurations
     )
     bucket_notification.reload()
+
+    bucket_configurations = s3_client.get_bucket_notification_configuration(Bucket=bucket)
     return json2table(response)
 
 
@@ -289,7 +289,7 @@ def _create_lambda(function_name, role, handler_filename, handler_function,
                    artifact_bucket=None, zipfile=None, slack_token=None,
                    slack_channel='systemmessages'):
     log.debug('create lambda function: %s' % function_name)
-    # move to caller!_create_lambda
+    # move to caller!
     # _install_dependencies_with_pip('requirements.txt', './vendored')
     client = boto3.client('lambda')
     # print ('creating function %s with role %s handler %s folders %s timeout %s memory %s') % (
@@ -538,7 +538,8 @@ def rollback(function_name, alias_name=ALIAS_NAME, version=None,
     return 0
 
 
-def delete_lambda(function_name, slack_token=None, slack_channel='systemmessages'):
+def delete_lambda(function_name, s3_event_sources = None, time_event_sources = None, alias_name = ALIAS_NAME,
+                  slack_token=None, slack_channel='systemmessages'):
     """Delete a lambda function.
 
     :param function_name:
@@ -546,8 +547,11 @@ def delete_lambda(function_name, slack_token=None, slack_channel='systemmessages
     :param slack_channel:
     :return: exit_code
     """
+    unwire(function_name, s3_event_sources=s3_event_sources, time_event_sources=time_event_sources, alias_name=ALIAS_NAME)
     client = boto3.client('lambda')
     response = client.delete_function(FunctionName=function_name)
+
+
     # TODO remove event source first and maybe also needed for permissions
     print(json2table(response))
     message = 'ramuda bot: deleted lambda function: %s' % function_name
@@ -657,7 +661,7 @@ def filter_bucket_notifications_with_arn(lambda_function_configurations, lambda_
     return matching_notifications, not_matching_notifications
 
 
-def ensure_s3_event(s3_event_source, function_name, alias_name, target_lambda_arn, ensure="exists"):
+def _ensure_s3_event(s3_event_source, function_name, alias_name, target_lambda_arn, ensure="exists"):
     if not ensure in ENSURE_OPTIONS:
         print("{} is invalid ensure option, should be {}".format(ensure, ENSURE_OPTIONS))
 
@@ -808,22 +812,40 @@ def wire(function_name, s3_event_sources=None, time_event_sources=None,
     print('wiring lambda_arn %s ...' % lambda_arn)
 
     if lambda_function is not None:
-        for s3_event_source in s3_event_sources:
-            if 'ensure' in s3_event_source:
-                ensure_s3_event(s3_event_source, function_name, alias_name, lambda_arn, s3_event_source['ensure'])
-            else:
-                ensure_s3_event(s3_event_source, function_name, alias_name, lambda_arn, ensure='exists')
+        s3_events_ensure_exists, s3_events_ensure_absent = filter_events_ensure(s3_event_sources)
+        cloudwatch_events_ensure_exists, cloudwatch_events_ensure_absent = filter_events_ensure(time_event_sources)
 
-        for time_event in time_event_sources:
-            if 'ensure' in time_event:
-                _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, time_event['ensure'])
-            else:
-                _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, ensure='exists')
+        for s3_event_source in s3_events_ensure_absent:
+            _ensure_s3_event(s3_event_source, function_name, alias_name, lambda_arn, s3_event_source['ensure'])
+        for s3_event_source in s3_events_ensure_exists:
+            _ensure_s3_event(s3_event_source, function_name, alias_name, lambda_arn, s3_event_source['ensure'])
+
+        for time_event in cloudwatch_events_ensure_absent:
+            _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, time_event['ensure'])
+        for time_event in cloudwatch_events_ensure_exists:
+            _ensure_cloudwatch_event(time_event, function_name, alias_name, lambda_arn, time_event['ensure'])
     message = ('ramuda bot: wiring lambda function: ' +
                '%s with alias %s' % (function_name, alias_name))
     monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
+
+def filter_events_ensure(event_sources):
+    events_ensure_exists = []
+    events_ensure_absent = []
+    for event in event_sources:
+        if 'ensure' in event:
+            if event['ensure']=='exists':
+                events_ensure_exists.append(event)
+            elif event['ensure']=='absent':
+                events_ensure_absent.append(event)
+            else:
+                print('Ensure must be one of {}, currently set to {}'.format(ENSURE_OPTIONS, event['ensure']))
+                sys.exit(1)
+        else:
+            event['ensure'] = 'exists'
+            events_ensure_exists.append(event)
+    return events_ensure_exists, events_ensure_absent
 
 
 def _get_lambda_policies(function_name, alias_name):
@@ -883,10 +905,9 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
                     print('\tRemoving All S3 events {} invoking {}'.format(source_bucket, lambda_arn))
                     _remove_events_from_s3_bucket(source_bucket, lambda_arn)
 
-        # Case: s3 events without permissons active
+        # Case: s3 events without permissons active "safety measure"
         for s3_event_source in s3_event_sources:
             bucket_name = s3_event_source.get('bucket')
-            print('\tS3: %s' % bucket_name)
             _remove_events_from_s3_bucket(bucket_name, lambda_arn)
 
         #### CloudWatch Events
@@ -899,7 +920,7 @@ def unwire(function_name, s3_event_sources=None, time_event_sources=None,
                     _remove_permission(function_name, statement['Sid'], alias_name, client_lambda)
                     print('\tRemoving Cloudwatch rule {} invoking {}'.format(rule_name, lambda_arn))
                     _remove_cloudwatch_rule_event(rule_name, lambda_arn)
-        # Case: rules without permissions active:
+        # Case: rules without permissions active, "safety measure"
         for time_event in time_event_sources:
             rule_name = time_event.get('ruleName')
             _remove_cloudwatch_rule_event(rule_name, lambda_arn)
@@ -954,6 +975,8 @@ def _remove_events_from_s3_bucket(bucket_name, target_lambda_arn, filter_rule = 
             bucket_configurations.pop('LambdaFunctionConfigurations')
 
     response = put_s3_lambda_notifications(bucket_configurations, bucket_notification)
+    bucket_configurations_2 = client_s3.get_bucket_notification_configuration(Bucket=bucket_name)
+
 
 
 
