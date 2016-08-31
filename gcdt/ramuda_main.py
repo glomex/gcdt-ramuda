@@ -7,12 +7,12 @@ Script to deploy Lambda functions to AWS
 
 from __future__ import print_function
 import sys
-from glomex_utils.config_reader import read_lambda_config
+from glomex_utils.config_reader import read_lambda_config, read_config_if_exists
 from docopt import docopt
 from gcdt import utils
 from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
-    wire, bundle_lambda, unwire, delete_lambda, rollback, ping
+    wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info
 from gcdt.utils import read_gcdt_user_config, get_context, get_command
 from gcdt.monitoring import datadog_notification, datadog_error
 
@@ -32,6 +32,7 @@ DOC = '''Usage:
         ramuda deploy
         ramuda list
         ramuda metrics <lambda>
+        ramuda info
         ramuda wire
         ramuda unwire
         ramuda delete  -f <lambda>
@@ -102,8 +103,23 @@ def main():
     elif arguments['delete']:
         are_credentials_still_valid()
         slack_token, slack_channel = get_user_config()
-        exit_code = delete_lambda(arguments['<lambda>'],
-                                  slack_token=slack_token, slack_channel=slack_channel)
+        conf = read_config_if_exists('lambda')
+        function_name = conf.get('lambda.name', None)
+        if function_name == str(arguments['<lambda>']):
+            s3_event_sources = conf.get('lambda.events.s3Sources', [])
+            time_event_sources = conf.get('lambda.events.timeSchedules', [])
+            exit_code = delete_lambda(arguments['<lambda>'], s3_event_sources, time_event_sources,
+                                      slack_token=slack_token)
+        else:
+            exit_code = delete_lambda(arguments['<lambda>'], [], [],
+                                      slack_token=slack_token)
+    elif arguments['info']:
+        are_credentials_still_valid()
+        conf = read_lambda_config()
+        function_name = conf.get('lambda.name')
+        s3_event_sources = conf.get('lambda.events.s3Sources', [])
+        time_event_sources = conf.get('lambda.events.timeSchedules', [])
+        exit_code = info(function_name, s3_event_sources, time_event_sources)
     elif arguments['wire']:
         are_credentials_still_valid()
         slack_token, slack_channel = get_user_config()
