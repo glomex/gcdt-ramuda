@@ -120,7 +120,7 @@ def main():
         conf = read_lambda_config()
         handler_filename = conf.get('lambda.handlerFile')
         folders_from_file = conf.get('bundling.folders')
-        exit_code = bundle_lambda   (handler_filename, folders_from_file)
+        exit_code = bundle_lambda(handler_filename, folders_from_file)
     elif arguments['rollback']:
         are_credentials_still_valid()
         if arguments['<version>']:
