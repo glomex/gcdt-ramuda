@@ -506,8 +506,9 @@ def test_lambda_add_invoke_permission(cwd, temp_files, temp_roles):
     assert_in('lambda:InvokeFunction', response['Statement'])
 
     # cleanup
-    delete_bucket(bucket_name)
     delete_lambda(lambda_name)
+    delete_bucket(bucket_name)
+
     return {'temp_roles': [role_name]}
 
 

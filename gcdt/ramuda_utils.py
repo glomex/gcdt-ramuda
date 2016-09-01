@@ -208,10 +208,54 @@ def create_sha256(code):
     return checksum
 
 
+def create_aws_s3_arn(bucket_name):
+    return 'arn:aws:s3:::' + bucket_name
+
+
+def get_bucket_from_s3_arn(aws_s3_arn):
+    # "arn:aws:s3:::test-bucket-dp-723" mirrors _create_aws_s3_arn
+    return aws_s3_arn.split(':')[5]
+
+
+def get_rule_name_from_event_arn(aws_event_arn):
+    # ex. 'arn:aws:events:eu-west-1:111537987451:rule/dp-preprod-test-dp-723-T1_fun2'
+    full_rule = aws_event_arn.split(':')[5]
+    return full_rule.split('/')[1]
+
+
 def get_remote_code_hash(function_name):
     client = boto3.client('lambda')
     response = client.get_function_configuration(FunctionName=function_name)
     return response['CodeSha256']
+
+
+def list_of_dict_equals(dict1, dict2):
+    if len(dict1) == len(dict2):
+        for d in dict1:
+            if d not in dict2:
+                return False
+    else:
+        return False
+    return True
+
+
+def build_filter_rules(prefix, suffix):
+    filter_rules = []
+    if prefix:
+        filter_rules.append(
+            {
+                'Name': 'Prefix',
+                'Value': prefix
+            }
+        )
+    if suffix:
+        filter_rules.append(
+            {
+                'Name': 'Suffix',
+                'Value': suffix
+            }
+        )
+    return filter_rules
 
 
 def get_packages_to_ignore(folder, ramuda_ignore_file):
