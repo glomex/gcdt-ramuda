@@ -141,6 +141,19 @@ def test_bundle_lambda(cwd, test_folder, temp_files):
     exit_code = bundle_lambda('./handler.py', folders_from_file)
     assert_equal(exit_code, 0)
 
+@with_setup_args(_setup, _teardown)
+def test_clean_lambda(cwd, test_folder, temp_files):
+    os.environ['ENV'] = 'DEV'
+    paths_to_clean = ['vendored', 'bundle.zip']
+    for path in paths_to_clean:
+        if path.find('.') != -1:
+            open(path, 'a').close()
+        else:
+            os.mkdir(path)
+    exit_code = cleanup_bundle()
+    assert_equals(exit_code, 0)
+    for path in paths_to_clean:
+        assert_false(os.path.exists(path)
 
 @attr('slow')
 @with_setup_args(_setup, _teardown)
