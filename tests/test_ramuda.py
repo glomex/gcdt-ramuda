@@ -16,7 +16,7 @@ import nose
 from nose.plugins.attrib import attr
 from testfixtures import LogCapture
 from .helpers import with_setup_args, create_tempfile, get_size
-from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda
+from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda, cleanup_bundle
 from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     aggregate_datapoints, json2table, create_sha256, ProgressPercentage
 from gcdt.logger import setup_logger
@@ -141,6 +141,7 @@ def test_bundle_lambda(cwd, test_folder, temp_files):
     exit_code = bundle_lambda('./handler.py', folders_from_file)
     assert_equal(exit_code, 0)
 
+
 @with_setup_args(_setup, _teardown)
 def test_clean_lambda(cwd, test_folder, temp_files):
     os.environ['ENV'] = 'DEV'
@@ -151,9 +152,9 @@ def test_clean_lambda(cwd, test_folder, temp_files):
         else:
             os.mkdir(path)
     exit_code = cleanup_bundle()
-    assert_equals(exit_code, 0)
+    assert_equal(exit_code, 0)
     for path in paths_to_clean:
-        assert_false(os.path.exists(path)
+        assert_false(os.path.exists(path))
 
 @attr('slow')
 @with_setup_args(_setup, _teardown)
