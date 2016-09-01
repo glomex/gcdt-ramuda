@@ -331,7 +331,6 @@ def _create_lambda(function_name, role, handler_filename, handler_function,
         return
 
     function_version = response['Version']
-    print(response)
     print(json2table(response))
     # FIXME: 23.08.2016 WHY update configuration after create?
     # timing issue:
