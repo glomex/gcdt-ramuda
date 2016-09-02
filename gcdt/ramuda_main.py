@@ -54,11 +54,11 @@ def are_credentials_still_valid():
 
 
 def get_user_config():
-    slack_tocken, slack_channel = read_gcdt_user_config(compatibility_mode='kumo')
-    if not slack_tocken:
+    slack_token, slack_channel = read_gcdt_user_config(compatibility_mode='kumo')
+    if not slack_token and not isinstance(slack_token, basestring):
         sys.exit(1)
     else:
-        return slack_tocken, slack_channel
+        return slack_token, slack_channel
 
 
 def main():
