@@ -2,20 +2,18 @@
 from __future__ import print_function
 import os
 import logging
-import shutil
 from StringIO import StringIO
 from collections import OrderedDict
-from tempfile import mkdtemp, NamedTemporaryFile
+from tempfile import NamedTemporaryFile
 import textwrap
 import json
 import time
 from s3transfer.subscribers import BaseSubscriber
 from nose.tools import assert_true, assert_false, assert_not_in, assert_in, \
     assert_equal, assert_regexp_matches
-import nose
-from nose.plugins.attrib import attr
+import pytest
 from testfixtures import LogCapture
-from .helpers import with_setup_args, create_tempfile, get_size
+from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles
 from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda
 from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     aggregate_datapoints, json2table, create_sha256, ProgressPercentage, \
@@ -29,26 +27,8 @@ log = setup_logger(logger_name='ramuda_test')
 def here(p): return os.path.join(os.path.dirname(__file__), p)
 
 
-def _setup():
-    # setup a temporary folder
-    cwd = os.getcwd()
-    test_folder = mkdtemp()
-    os.chdir(test_folder)
-    temp_files = []
-    return {'cwd': cwd, 'test_folder': test_folder, 'temp_files': temp_files}
-
-
-def _teardown(cwd, test_folder, temp_files):
-    # rm temporary folder
-    os.chdir(cwd)
-    shutil.rmtree(test_folder)
-    for t in temp_files:
-        os.unlink(t)
-
-
-@attr('slow')
-@with_setup_args(_setup, _teardown)
-def test_get_packages_to_ignore(cwd, test_folder, temp_files):
+@pytest.mark.slow
+def test_get_packages_to_ignore(temp_folder, cleanup_tempfiles):
     requirements_txt = create_tempfile('boto3\npyhocon\n')
     # typical .ramudaignore file:
     ramuda_ignore = create_tempfile(textwrap.dedent("""\
@@ -61,26 +41,24 @@ def test_get_packages_to_ignore(cwd, test_folder, temp_files):
         futures*
     """))
     # schedule the temp_files for cleanup:
-    temp_files.extend([requirements_txt, ramuda_ignore])
-    _install_dependencies_with_pip(requirements_txt, test_folder)
+    cleanup_tempfiles.extend([requirements_txt, ramuda_ignore])
+    _install_dependencies_with_pip(requirements_txt, temp_folder[0])
 
-    packages = os.listdir(test_folder)
+    packages = os.listdir(temp_folder[0])
     log.info('packages in test folder:')
     for package in packages:
         log.debug(package)
 
-    matches = get_packages_to_ignore(test_folder, ramuda_ignore)
+    matches = get_packages_to_ignore(temp_folder[0], ramuda_ignore)
     log.info('matches in test folder:')
     for match in sorted(matches):
         log.debug(match)
     assert_true('boto3/__init__.py' in matches)
     assert_false('pyhocon' in matches)
-    return {'temp_files': temp_files}
 
 
-@attr('slow')
-@with_setup_args(_setup, _teardown)
-def test_cleanup_folder(cwd, test_folder, temp_files):
+@pytest.mark.slow
+def test_cleanup_folder(temp_folder, cleanup_tempfiles):
     requirements_txt = create_tempfile('boto3\npyhocon\n')
     # typical .ramudaignore file:
     ramuda_ignore = create_tempfile(textwrap.dedent("""\
@@ -92,37 +70,33 @@ def test_cleanup_folder(cwd, test_folder, temp_files):
         jmespath*
         futures*
     """))
-    temp_files.extend([requirements_txt, ramuda_ignore])
+    cleanup_tempfiles.extend([requirements_txt, ramuda_ignore])
     log.info(_install_dependencies_with_pip(
-        here('resources/sample_lambda/requirements.txt'), test_folder))
+        here('resources/sample_lambda/requirements.txt'), temp_folder[0]))
 
-    log.debug('test folder size: %s' % get_size(test_folder))
-    cleanup_folder(test_folder, ramuda_ignore)
-    log.debug('test folder size: %s' % get_size(test_folder))
-    packages = os.listdir(test_folder)
+    log.debug('test folder size: %s' % get_size(temp_folder[0]))
+    cleanup_folder(temp_folder[0], ramuda_ignore)
+    log.debug('test folder size: %s' % get_size(temp_folder[0]))
+    packages = os.listdir(temp_folder[0])
     log.debug(packages)
     assert_not_in('boto3', packages)
     assert_in('pyhocon', packages)
-    return {'temp_files': temp_files}
 
 
-@attr('slow')
-@with_setup_args(_setup, _teardown)
-def test_install_dependencies_with_pip(cwd, test_folder, temp_files):
+@pytest.mark.slow
+def test_install_dependencies_with_pip(temp_folder, cleanup_tempfiles):
     requirements_txt = create_tempfile('werkzeug\n')
-    temp_files.append(requirements_txt)
+    cleanup_tempfiles.append(requirements_txt)
     log.info(_install_dependencies_with_pip(
         requirements_txt,
-        test_folder))
-    packages = os.listdir(test_folder)
+        temp_folder[0]))
+    packages = os.listdir(temp_folder[0])
     for package in packages:
         log.debug(package)
     assert_true('werkzeug' in packages)
-    return {'temp_files': temp_files}
 
 
-@with_setup_args(_setup, _teardown)
-def test_bundle_lambda(cwd, test_folder, temp_files):
+def test_bundle_lambda(temp_folder):
     folders_from_file = [
         {'source': './vendored', 'target': '.'},
         {'source': './impl', 'target': 'impl'}
@@ -144,14 +118,14 @@ def test_bundle_lambda(cwd, test_folder, temp_files):
     assert_equal(exit_code, 0)
 
 
-@attr('slow')
-@with_setup_args(_setup, _teardown)
-def test_bundle_lambda_exceeds_limit(cwd, test_folder, temp_files):
+@pytest.mark.slow
+def test_bundle_lambda_exceeds_limit(temp_folder):
     folders_from_file = [
         {'source': './vendored', 'target': '.'},
         {'source': './impl', 'target': 'impl'}
     ]
     os.environ['ENV'] = 'DEV'
+
     os.mkdir('./vendored')
     os.mkdir('./impl')
     with open('./requirements.txt', 'w') as req:
@@ -293,7 +267,8 @@ def test_build_filter_rules():
     match = list_of_dict_equals(rules, rules_hardcoded)
     assert_true(match)
 
-def test_progress_percentage():
+
+def test_progress_percentage(cleanup_tempfiles):
     class ProgressCallbackInvoker(BaseSubscriber):
         """A back-compat wrapper to invoke a provided callback via a subscriber
 
@@ -308,6 +283,7 @@ def test_progress_percentage():
 
     # create dummy file
     tf = NamedTemporaryFile(delete=False, suffix='.tgz')
+    cleanup_tempfiles.append(tf.name)
     open(tf.name, 'w').write('some content here...')
     out = StringIO()
     # instantiate ProgressReporter
@@ -322,7 +298,3 @@ def test_progress_percentage():
     subscriber.on_progress(bytes_transferred=10)
     assert_regexp_matches(out.getvalue().strip(),
                           '.*\.tgz  11 / 20\.0  \(55\.00%\)')
-
-    # cleanup the testfile
-    tf.close()
-    os.unlink(tf.name)

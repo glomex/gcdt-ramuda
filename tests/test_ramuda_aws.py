@@ -8,11 +8,6 @@ from StringIO import StringIO
 
 import boto3
 import pytest
-#from nose.plugins.attrib import attr
-from nose.tools import assert_equal, assert_greater_equal, \
-    assert_in, assert_not_in, assert_regexp_matches
-from pyhocon import ConfigFactory
-
 from gcdt.logger import setup_logger
 from gcdt.ramuda_core import delete_lambda, deploy_lambda, \
     _lambda_add_time_schedule_event_source, \
@@ -20,9 +15,15 @@ from gcdt.ramuda_core import delete_lambda, deploy_lambda, \
     _update_lambda_configuration, get_metrics, rollback, _get_alias_version
 from gcdt.ramuda_utils import list_lambda_versions, make_zip_file_bytes, \
     create_sha256, get_remote_code_hash
-from .helpers import random_string
-from .helpers_aws import create_bucket, delete_bucket, create_role_helper, \
-    delete_role_helper, create_lambda_helper, create_lambda_role_helper
+from nose.tools import assert_equal, assert_greater_equal, \
+    assert_in, assert_not_in, assert_regexp_matches
+from pyhocon import ConfigFactory
+
+from .helpers import random_string, cleanup_tempfiles
+from .helpers_aws import create_role_helper, delete_role_helper, \
+    create_lambda_helper, create_lambda_role_helper, check_preconditions, \
+    temp_bucket
+
 
 log = setup_logger(logger_name='ramuda_test_aws')
 # TODO: speedup tests by reusing lambda functions where possible
@@ -45,49 +46,17 @@ def get_size(start_path='.'):
 # TODO: helpers_was.py!
 
 
-def precond_check():
-    """Make sure the default AWS profile is set so the test can run on AWS."""
-    if os.getenv('USER', None) != 'jenkins' and \
-            not os.getenv('AWS_DEFAULT_PROFILE', None):
-        print("AWS_DEFAULT_PROFILE variable not set! Test is skipped.")
-        return True
-    if not os.getenv('ENV', None):
-        print("ENV environment variable not set! Test is skipped.")
-        return True
-    if not os.getenv('ACCOUNT', None):
-        print("ACCOUNT environment variable not set! Test is skipped.")
-        return True
-
-    return False
-
-
-# skipif helper check_preconditions
-check_preconditions = pytest.mark.skipif(precond_check(),
-    reason="Set environment variables to run tests on AWS (see README.md).")
-
-
 @pytest.fixture(scope='function')  # 'function' or 'module'
-def temp_folder():
+def vendored_folder():
     # provide a temp folder and cleanup after test
     # this also changes into the folder and back to cwd during cleanup
     cwd = (os.getcwd())
     folder = here('.')
     os.chdir(folder)  # reuse ./vendored folder => cd tests/
-    yield folder, cwd
+    yield
     # cleanup
     os.chdir(cwd)  # cd to original folder
     # reuse ./vendored folder
-
-
-@pytest.fixture(scope='function')  # 'function' or 'module'
-def temp_bucket():
-    # create a bucket
-    temp_string = random_string()
-    bucket_name = 'unittest-lambda-s3-event-source-%s' % temp_string
-    create_bucket(bucket_name)
-    yield bucket_name
-    # cleanup
-    delete_bucket(bucket_name)
 
 
 @pytest.fixture(scope='module')  # 'function' or 'module'
@@ -106,16 +75,7 @@ def temp_lambda():
     delete_role_helper(role_name)
 
 
-@pytest.fixture(scope='function')  # 'function' or 'module'
-def cleanup_tempfiles():
-    items = []
-    yield items
-    # cleanup
-    for i in items:
-        os.unlink(i)
-
-
-@pytest.fixture(scope='function')  # 'function' or 'module'
+@pytest.fixture(scope='module')  # 'function' or 'module'
 def cleanup_roles():
     items = []
     yield items
@@ -124,7 +84,7 @@ def cleanup_roles():
         delete_role_helper(i)
 
 
-@pytest.fixture(scope='function')  # 'function' or 'module'
+@pytest.fixture(scope='module')  # 'function' or 'module'
 def cleanup_lambdas():
     items = []
     yield items
@@ -133,18 +93,9 @@ def cleanup_lambdas():
         delete_lambda(i)
 
 
-@pytest.fixture(scope='function')  # 'function' or 'module'
-def cleanup_buckets():
-    items = []
-    yield items
-    # cleanup
-    for i in items:
-        delete_bucket(i)
-
-
 @pytest.mark.aws
 @check_preconditions
-def test_create_lambda(temp_folder, cleanup_lambdas, cleanup_roles):
+def test_create_lambda(vendored_folder, cleanup_lambdas, cleanup_roles):
     log.info('running test_create_lambda')
     temp_string = random_string()
     lambda_name = 'jenkins_test_' + temp_string
@@ -234,7 +185,7 @@ def test_create_lambda(temp_folder, cleanup_lambdas, cleanup_roles):
 
 @pytest.mark.aws
 @check_preconditions
-def test_create_lambda_with_s3(temp_folder, cleanup_lambdas, cleanup_roles):
+def test_create_lambda_with_s3(vendored_folder, cleanup_lambdas, cleanup_roles):
     log.info('running test_create_lambda_with_s3')
     account = os.getenv('ACCOUNT')
     temp_string = random_string()
@@ -324,7 +275,7 @@ def test_create_lambda_with_s3(temp_folder, cleanup_lambdas, cleanup_roles):
 
 @pytest.mark.aws
 @check_preconditions
-def test_update_lambda(temp_folder, cleanup_lambdas, cleanup_roles):
+def test_update_lambda(vendored_folder, cleanup_lambdas, cleanup_roles):
     log.info('running test_update_lambda')
     temp_string = random_string()
     lambda_name = 'jenkins_test_%s' % temp_string
@@ -409,7 +360,7 @@ def _get_count(function_name, alias_name='ACTIVE', version=None):
 
 @pytest.mark.aws
 @check_preconditions
-def test_schedule_event_source(temp_folder, cleanup_lambdas, cleanup_roles):
+def test_schedule_event_source(vendored_folder, cleanup_lambdas, cleanup_roles):
     log.info('running test_schedule_event_source')
     # include reading config from settings file
     config_string = '''
@@ -466,7 +417,7 @@ def test_schedule_event_source(temp_folder, cleanup_lambdas, cleanup_roles):
 @pytest.mark.aws
 @pytest.mark.slow
 @check_preconditions
-def test_wire_unwire_lambda_with_s3(temp_folder, cleanup_lambdas, cleanup_roles,
+def test_wire_unwire_lambda_with_s3(vendored_folder, cleanup_lambdas, cleanup_roles,
                                     temp_bucket):
     log.info('running test_wire_unwire_lambda_with_s3')
 
@@ -535,7 +486,7 @@ def test_wire_unwire_lambda_with_s3(temp_folder, cleanup_lambdas, cleanup_roles,
 
 @pytest.mark.aws
 @check_preconditions
-def test_lambda_add_invoke_permission(temp_folder, temp_bucket, cleanup_lambdas,
+def test_lambda_add_invoke_permission(vendored_folder, temp_bucket, cleanup_lambdas,
                                       cleanup_roles):
     log.info('running test_lambda_add_invoke_permission')
 
@@ -563,7 +514,7 @@ def test_lambda_add_invoke_permission(temp_folder, temp_bucket, cleanup_lambdas,
 
 @pytest.mark.aws
 @check_preconditions
-def test_list_functions(temp_folder, temp_lambda):
+def test_list_functions(vendored_folder, temp_lambda):
     log.info('running test_list_functions')
 
     lambda_name = temp_lambda[0]
@@ -580,7 +531,7 @@ def test_list_functions(temp_folder, temp_lambda):
 
 @pytest.mark.aws
 @check_preconditions
-def test_update_lambda_configuration(temp_folder, temp_lambda):
+def test_update_lambda_configuration(vendored_folder, temp_lambda):
     log.info('running test_update_lambda_configuration')
 
     lambda_name = temp_lambda[0]
@@ -599,7 +550,7 @@ def test_update_lambda_configuration(temp_folder, temp_lambda):
 
 @pytest.mark.aws
 @check_preconditions
-def test_get_metrics(temp_folder, temp_lambda):
+def test_get_metrics(vendored_folder, temp_lambda):
     log.info('running test_get_metrics')
 
     out = StringIO()
@@ -610,7 +561,7 @@ def test_get_metrics(temp_folder, temp_lambda):
 
 @pytest.mark.aws
 @check_preconditions
-def test_rollback(temp_folder, temp_lambda):
+def test_rollback(vendored_folder, temp_lambda):
     log.info('running test_rollback')
 
     lambda_name = temp_lambda[0]
@@ -622,7 +573,7 @@ def test_rollback(temp_folder, temp_lambda):
     create_lambda_helper(lambda_name, role_arn,
                          './resources/sample_lambda/handler_v2.py')
 
-    # now we use function_versoin 2!
+    # now we use function_version 2!
     alias_version = _get_alias_version(lambda_name, 'ACTIVE')
     assert_equal(alias_version, '$LATEST')
 
@@ -647,7 +598,7 @@ def test_rollback(temp_folder, temp_lambda):
 
 @pytest.mark.aws
 @check_preconditions
-def test_get_remote_code_hash(temp_folder, temp_lambda):
+def test_get_remote_code_hash(vendored_folder, temp_lambda):
     log.info('running test_get_remote_code_hash')
 
     handler_filename = './resources/sample_lambda/handler.py'
@@ -660,8 +611,8 @@ def test_get_remote_code_hash(temp_folder, temp_lambda):
     zipfile = make_zip_file_bytes(handler=handler_filename,
                                   paths=folders_from_file)
     expected_hash = create_sha256(zipfile)
-    print('hash: %s' % expected_hash)
 
     lambda_name = temp_lambda[0]
+    time.sleep(10)
     remote_hash = get_remote_code_hash(lambda_name)
     assert_equal(remote_hash, expected_hash)
