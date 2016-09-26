@@ -7,12 +7,15 @@ Script to deploy Lambda functions to AWS
 
 from __future__ import print_function
 import sys
-from glomex_utils.config_reader import read_lambda_config
+from glomex_utils.config_reader import read_lambda_config, read_config_if_exists
 from docopt import docopt
 from gcdt import utils
 from gcdt.logger import setup_logger
-from gcdt.ramuda_core import list_functions, cleanup_bundle, get_metrics, deploy_lambda, \
-    wire, bundle_lambda, unwire, delete_lambda, rollback, ping
+from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
+    wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info, cleanup_bundle
+from gcdt.utils import read_gcdt_user_config, get_context, get_command
+from gcdt.monitoring import datadog_notification, datadog_error, \
+    datadog_event_detail
 
 log = setup_logger(logger_name='ramuda')
 
@@ -25,23 +28,22 @@ log = setup_logger(logger_name='ramuda')
 # TODO retain only n versions
 
 # creating docopt parameters and usage help
-DOC = """Usage:
-        ramuda clean
+DOC = '''Usage:
         ramuda bundle
         ramuda deploy
         ramuda list
         ramuda metrics <lambda>
+        ramuda info
         ramuda wire
         ramuda unwire
         ramuda delete  -f <lambda>
         ramuda rollback  <lambda> [<version>]
         ramuda ping <lambda> [<version>]
-        ramuda configure
         ramuda version
 
 Options:
 -h --help           show this
-"""
+'''
 
 
 def are_credentials_still_valid():
@@ -52,20 +54,23 @@ def are_credentials_still_valid():
         sys.exit(1)
 
 
-def read_ramuda_config():
-    """Wrapper to bail out on invalid credentials."""
-    from gcdt.ramuda_utils import read_ramuda_config as rrc
-    ramuda_config, exit_code = rrc()
-    if exit_code:
+def get_user_config():
+    slack_token, slack_channel = read_gcdt_user_config(compatibility_mode='kumo')
+    if not slack_token and not isinstance(slack_token, basestring):
         sys.exit(1)
     else:
-        return ramuda_config
+        return slack_token, slack_channel
 
 
 def main():
     exit_code = 0
-    slack_token = read_ramuda_config().get('ramuda.slack-token')
     arguments = docopt(DOC)
+    if arguments['version']:
+        utils.version()
+        sys.exit(0)
+
+    context = get_context('ramuda', get_command(arguments))
+    datadog_notification(context)
     if arguments['clean']:
         cleanup_bundle()
     elif arguments['list']:
@@ -78,6 +83,7 @@ def main():
         exit_code = get_metrics(arguments['<lambda>'])
     elif arguments['deploy']:
         are_credentials_still_valid()
+        slack_token, slack_channel = get_user_config()
         conf = read_lambda_config()
         lambda_name = conf.get('lambda.name')
         lambda_description = conf.get('lambda.description')
@@ -96,26 +102,55 @@ def main():
                                   memory_size, subnet_ids=subnet_ids,
                                   security_groups=security_groups,
                                   artifact_bucket=artifact_bucket)
+        event = 'ramuda bot: deployed lambda function: %s ' % lambda_name
+        datadog_event_detail(context, event)
     elif arguments['delete']:
         are_credentials_still_valid()
-        exit_code = delete_lambda(arguments['<lambda>'],
-                                  slack_token=slack_token)
+        slack_token, slack_channel = get_user_config()
+        conf = read_config_if_exists('lambda')
+        function_name = conf.get('lambda.name', None)
+        if function_name == str(arguments['<lambda>']):
+            s3_event_sources = conf.get('lambda.events.s3Sources', [])
+            time_event_sources = conf.get('lambda.events.timeSchedules', [])
+            exit_code = delete_lambda(arguments['<lambda>'], s3_event_sources,
+                                      time_event_sources,
+                                      slack_token=slack_token)
+        else:
+            exit_code = delete_lambda(arguments['<lambda>'], [], [],
+                                      slack_token=slack_token)
+        event = 'ramuda bot: deleted lambda function: %s' % function_name
+        datadog_event_detail(context, event)
+    elif arguments['info']:
+        are_credentials_still_valid()
+        conf = read_lambda_config()
+        function_name = conf.get('lambda.name')
+        s3_event_sources = conf.get('lambda.events.s3Sources', [])
+        time_event_sources = conf.get('lambda.events.timeSchedules', [])
+        exit_code = info(function_name, s3_event_sources, time_event_sources)
     elif arguments['wire']:
         are_credentials_still_valid()
+        slack_token, slack_channel = get_user_config()
         conf = read_lambda_config()
         function_name = conf.get('lambda.name')
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
         time_event_sources = conf.get('lambda.events.timeSchedules', [])
         exit_code = wire(function_name, s3_event_sources, time_event_sources,
-                         slack_token=slack_token)
+                         slack_token=slack_token, slack_channel=slack_channel)
+        event = ('ramuda bot: wiring lambda function: ' +
+                 '%s with alias %s' % (function_name, 'ACTIVE'))
+        datadog_event_detail(context, event)
     elif arguments['unwire']:
         are_credentials_still_valid()
+        slack_token, slack_channel = get_user_config()
         conf = read_lambda_config()
         function_name = conf.get('lambda.name')
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
         time_event_sources = conf.get('lambda.events.timeSchedules', [])
         exit_code = unwire(function_name, s3_event_sources, time_event_sources,
-                           slack_token=slack_token)
+                           slack_token=slack_token, slack_channel=slack_channel)
+        event = ('ramuda bot: UN-wiring lambda function: %s ' % function_name +
+                 'with alias %s' % 'ACTIVE')
+        datadog_event_detail(context, event)
     elif arguments['bundle']:
         conf = read_lambda_config()
         handler_filename = conf.get('lambda.handlerFile')
@@ -123,22 +158,29 @@ def main():
         exit_code = bundle_lambda(handler_filename, folders_from_file)
     elif arguments['rollback']:
         are_credentials_still_valid()
+        slack_token, slack_channel = get_user_config()
         if arguments['<version>']:
             exit_code = rollback(arguments['<lambda>'], 'ACTIVE',
                                  arguments['<version>'],
-                                 slack_token=slack_token)
+                                 slack_token=slack_token, slack_channel=slack_channel)
+            event = ('ramuda bot: rolled back lambda function: ' +
+                    '%s to version %s' % (arguments['<lambda>'], arguments['<version>']))
+            datadog_event_detail(context, event)
         else:
             exit_code = rollback(arguments['<lambda>'], 'ACTIVE',
-                                 slack_token=slack_token)
+                                 slack_token=slack_token, slack_channel=slack_channel)
+            event = ('ramuda bot: rolled back lambda function: %s to ' +
+                     'previous version') % arguments['<lambda>']
+            datadog_event_detail(context, event)
     elif arguments['ping']:
         are_credentials_still_valid()
         if arguments['<version>']:
             ping(arguments['<lambda>'], version=arguments['<version>'])
         else:
             ping(arguments['<lambda>'])
-    elif arguments['version']:
-        utils.version()
 
+    if exit_code:
+        datadog_error(context)
     sys.exit(exit_code)
 
 
