@@ -180,6 +180,8 @@ def test_create_lambda(vendored_folder, cleanup_lambdas, cleanup_roles):
                   memory=memory_size,
                   artifact_bucket=artifact_bucket)
 
+    # TODO improve this (by using a waiter??)
+    time.sleep(10)  # wait for lambda function to become available
     cleanup_lambdas.append(lambda_name)
 
 
