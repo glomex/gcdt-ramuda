@@ -543,7 +543,8 @@ def delete_lambda(function_name, s3_event_sources=[], time_event_sources=[],
     :param slack_channel:
     :return: exit_code
     """
-    unwire(function_name, s3_event_sources=s3_event_sources, time_event_sources=time_event_sources,
+    unwire(function_name, s3_event_sources=s3_event_sources,
+           time_event_sources=time_event_sources,
            alias_name=ALIAS_NAME)
     client = boto3.client('lambda')
     response = client.delete_function(FunctionName=function_name)
