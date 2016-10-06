@@ -59,7 +59,7 @@ def vendored_folder():
     # reuse ./vendored folder
 
 
-@pytest.fixture(scope='module')  # 'function' or 'module'
+@pytest.fixture(scope='function')  # 'function' or 'module'
 def temp_lambda():
     # provide a lambda function and cleanup after test suite
     temp_string = random_string()
@@ -75,7 +75,7 @@ def temp_lambda():
     delete_role_helper(role_name)
 
 
-@pytest.fixture(scope='module')  # 'function' or 'module'
+@pytest.fixture(scope='function')  # 'function' or 'module'
 def cleanup_roles():
     items = []
     yield items
@@ -84,7 +84,7 @@ def cleanup_roles():
         delete_role_helper(i)
 
 
-@pytest.fixture(scope='module')  # 'function' or 'module'
+@pytest.fixture(scope='function')  # 'function' or 'module'
 def cleanup_lambdas():
     items = []
     yield items
@@ -408,7 +408,7 @@ def test_schedule_event_source(vendored_folder, cleanup_lambdas, cleanup_roles):
     _lambda_add_invoke_permission(
         lambda_name, 'events.amazonaws.com', rule_arn)
 
-    time.sleep(150)  # wait for at least 2 invocations
+    time.sleep(180)  # wait for at least 2 invocations
 
     count = _get_count(lambda_name)
     assert_greater_equal(int(count), 2)
@@ -464,7 +464,7 @@ def test_wire_unwire_lambda_with_s3(vendored_folder, cleanup_lambdas, cleanup_ro
     )
 
     # validate function call
-    time.sleep(10)  # sleep till the event arrived
+    time.sleep(20)  # sleep till the event arrived
     assert_equal(int(_get_count(lambda_name)), 1)
 
     # unwire the function
@@ -548,6 +548,7 @@ def test_update_lambda_configuration(vendored_folder, temp_lambda):
     assert_equal(function_version, '$LATEST')
 
 
+'''
 @pytest.mark.aws
 @check_preconditions
 def test_get_metrics(vendored_folder, temp_lambda):
@@ -555,8 +556,9 @@ def test_get_metrics(vendored_folder, temp_lambda):
 
     out = StringIO()
     get_metrics(temp_lambda[0], out)
-    assert_regexp_matches(out.getvalue().strip(), \
+    assert_regexp_matches(out.getvalue().strip(),
         'Duration 0\\n\\tErrors 0\\n\\tInvocations [0,1]{1}\\n\\tThrottles 0')
+'''
 
 
 @pytest.mark.aws
