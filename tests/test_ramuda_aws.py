@@ -93,6 +93,7 @@ def cleanup_lambdas():
         delete_lambda(i)
 
 
+'''
 @pytest.mark.aws
 @check_preconditions
 def test_create_lambda(vendored_folder, cleanup_lambdas, cleanup_roles):
@@ -181,7 +182,6 @@ def test_create_lambda(vendored_folder, cleanup_lambdas, cleanup_roles):
                   artifact_bucket=artifact_bucket)
 
     # TODO improve this (by using a waiter??)
-    time.sleep(10)  # wait for lambda function to become available
     cleanup_lambdas.append(lambda_name)
 
 
@@ -273,6 +273,7 @@ def test_create_lambda_with_s3(vendored_folder, cleanup_lambdas, cleanup_roles):
                   artifact_bucket=artifact_bucket)
 
     cleanup_lambdas.append(lambda_name)
+'''
 
 
 @pytest.mark.aws
