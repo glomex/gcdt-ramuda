@@ -990,12 +990,11 @@ def _remove_permission(function_name, statement_id, qualifier, lambda_client):
                                                       StatementId=statement_id,
                                                       Qualifier=qualifier)
 
+
 def cleanup_bundle():
-    """
-    Deletes files used for creating bundle.
+    """Deletes files used for creating bundle.
         * vendored/*
         * bundle.zip
-    :return: exit code for deleting files
     """
     paths = ['./vendored', './bundle.zip']
     for path in paths:

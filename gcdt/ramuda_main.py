@@ -29,6 +29,7 @@ log = setup_logger(logger_name='ramuda')
 
 # creating docopt parameters and usage help
 DOC = '''Usage:
+        ramuda clean
         ramuda bundle
         ramuda deploy
         ramuda list
