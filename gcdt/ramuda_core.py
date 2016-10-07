@@ -6,6 +6,7 @@ Script to deploy Lambda functions to AWS
 
 from __future__ import print_function
 import sys
+import os, shutil
 import subprocess
 import uuid
 import time
@@ -988,6 +989,21 @@ def _remove_permission(function_name, statement_id, qualifier, lambda_client):
     response_remove = lambda_client.remove_permission(FunctionName=function_name,
                                                       StatementId=statement_id,
                                                       Qualifier=qualifier)
+
+
+def cleanup_bundle():
+    """Deletes files used for creating bundle.
+        * vendored/*
+        * bundle.zip
+    """
+    paths = ['./vendored', './bundle.zip']
+    for path in paths:
+        if os.path.exists(path):
+            log.debug("Deleting %s..." % path)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
 
 
 def ping(function_name, alias_name=ALIAS_NAME, version=None):
