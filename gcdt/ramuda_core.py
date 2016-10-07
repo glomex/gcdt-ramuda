@@ -76,6 +76,37 @@ def _get_alias_version(function_name, alias_name):
         return
 
 
+def _get_version_from_response(func):
+    version = func['Version']
+    return int(version) if version.isdigit() else 0
+
+
+def _get_previous_version(function_name, alias_name):
+    client = boto3.client('lambda')
+    response = client.get_alias(
+        FunctionName = function_name,
+        Name=alias_name
+    )
+    current_version = response['FunctionVersion']
+    if current_version != '$LATEST':
+        return str(int(current_version) - 1)
+
+    max_version = 0
+    marker = None
+    request_more_versions = True
+    while request_more_versions:
+        kwargs = {'Marker': marker} if marker else {}
+        response = client.list_versions_by_function(FunctionName=function_name, **kwargs)
+        if 'Marker' not in response:
+            request_more_versions = False
+        else:
+            marker = response['Marker']
+        versions = map(_get_version_from_response, response['Versions'])
+        versions.append(max_version)
+        max_version = max(versions)
+    return str(max(0, max_version - 1))
+
+
 def _deploy_alias(function_name, function_version, alias_name=ALIAS_NAME):
     if _alias_exists(function_name, alias_name):
         _update_alias(function_name, function_version, alias_name)
@@ -508,30 +539,20 @@ def rollback(function_name, alias_name=ALIAS_NAME, version=None,
     :return: exit_code
     """
     if version:
-        print('rolling back to version %s' % version)
-        # for version in ramuda_utils.list_lambda_versions(function_name)['Versions']:
-        #    print version['Version']
-        _update_alias(function_name, version, alias_name)
-        message = ('ramuda bot: rolled back lambda function: ' +
-                   '%s to version %s' % (function_name, version))
-        monitoring.slack_notification(slack_channel, message, slack_token)
+        print('rolling back to version {}'.format(version))
+        message = 'ramuda bot: rolled back lambda function: {} to version %s'.format(function_name, version)
     else:
         print('rolling back to previous version')
-        client = boto3.client('lambda')
-        response = client.get_alias(
-            FunctionName=function_name,
-            Name=alias_name
-        )
+        version = _get_previous_version(function_name, alias_name)
+        if version == '0':
+            print('unable to find previous version of lambda function')
+            return 1
 
-        current_version = response['FunctionVersion']
-        print('current version is %s' % current_version)
-        version = str(int(current_version) - 1)
         print('new version is %s' % str(version))
-        _update_alias(function_name, version, alias_name)
+        message = 'ramuda bot: rolled back lambda function: {} to previous version'.format(function_name)
 
-        message = ('ramuda bot: rolled back lambda function: %s to ' +
-                   'previous version') % function_name
-        monitoring.slack_notification(slack_channel, message, slack_token)
+    _update_alias(function_name, version, alias_name)
+    monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
