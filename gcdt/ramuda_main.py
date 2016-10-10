@@ -12,7 +12,7 @@ from docopt import docopt
 from gcdt import utils
 from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
-    wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info
+    wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info, cleanup_bundle
 from gcdt.utils import read_gcdt_user_config, get_context, get_command
 from gcdt.monitoring import datadog_notification, datadog_error, \
     datadog_event_detail
@@ -29,6 +29,7 @@ log = setup_logger(logger_name='ramuda')
 
 # creating docopt parameters and usage help
 DOC = '''Usage:
+        ramuda clean
         ramuda bundle
         ramuda deploy
         ramuda list
@@ -71,8 +72,9 @@ def main():
 
     context = get_context('ramuda', get_command(arguments))
     datadog_notification(context)
-
-    if arguments['list']:
+    if arguments['clean']:
+        cleanup_bundle()
+    elif arguments['list']:
         are_credentials_still_valid()
         exit_code = list_functions()
         log.debug('debug_test')
