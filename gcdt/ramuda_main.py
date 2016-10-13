@@ -7,8 +7,11 @@ Script to deploy Lambda functions to AWS
 
 from __future__ import print_function
 import sys
-from glomex_utils.config_reader import read_lambda_config, read_config_if_exists
+
 from docopt import docopt
+from clint.textui import colored
+
+from glomex_utils.config_reader import read_lambda_config, read_config_if_exists
 from gcdt import utils
 from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
@@ -20,7 +23,7 @@ from gcdt.monitoring import datadog_notification, datadog_error, \
 log = setup_logger(logger_name='ramuda')
 
 # TODO introduce own config for account detection
-# TODO reupload on requirements.txt changes
+# TODO re-upload on requirements.txt changes
 # TODO manage log groups
 # TODO silence slacker
 # TODO fill description with git commit, jenkins build or local info
@@ -97,12 +100,16 @@ def main():
         subnet_ids = conf.get('lambda.vpc.subnetIds', None)
         security_groups = conf.get('lambda.vpc.securityGroups', None)
         artifact_bucket = conf.get('deployment.artifactBucket', None)
+        fail_deploy_with_unsuccessfull_ping = conf.get(
+            'deployment.failDeployWithUnsuccessfullPing', False)
         exit_code = deploy_lambda(lambda_name, role_arn, handler_filename,
                                   lambda_handler, folders_from_file,
                                   lambda_description, timeout,
                                   memory_size, subnet_ids=subnet_ids,
                                   security_groups=security_groups,
-                                  artifact_bucket=artifact_bucket)
+                                  artifact_bucket=artifact_bucket,
+                                  fail_deploy_with_unsuccessfull_ping=
+                                  fail_deploy_with_unsuccessfull_ping)
         event = 'ramuda bot: deployed lambda function: %s ' % lambda_name
         datadog_event_detail(context, event)
     elif arguments['delete']:
@@ -176,9 +183,12 @@ def main():
     elif arguments['ping']:
         are_credentials_still_valid()
         if arguments['<version>']:
-            ping(arguments['<lambda>'], version=arguments['<version>'])
+            response = ping(arguments['<lambda>'], version=arguments['<version>'])
         else:
-            ping(arguments['<lambda>'])
+            response = ping(arguments['<lambda>'])
+        if not response == '"alive"':
+            exit_code = 1
+            print(colored.red('Your lambda function did not respond to ping.'))
 
     if exit_code:
         datadog_error(context)
