@@ -626,7 +626,7 @@ def test_get_remote_code_hash(vendored_folder, temp_lambda):
     handler_filename = './resources/sample_lambda/handler.py'
     folders_from_file = [
         {'source': './vendored', 'target': '.'},
-        {'source': './impl', 'target': 'impl'}
+        {'source': './resources/sample_lambda/impl', 'target': 'impl'}
     ]
 
     # get local hash
