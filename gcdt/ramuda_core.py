@@ -253,7 +253,8 @@ def list_functions(out=sys.stdout):
 def deploy_lambda(function_name, role, handler_filename, handler_function,
                   folders, description, timeout, memory, subnet_ids=None,
                   security_groups=None, artifact_bucket=None,
-                  fail_deploy_with_unsuccessfull_ping=False):
+                  fail_deployment_on_unsuccessful_ping=False,
+                  slack_token=None, slack_channel='systemmessages'):
     """Create or update a lambda function.
 
     :param function_name:
@@ -267,15 +268,19 @@ def deploy_lambda(function_name, role, handler_filename, handler_function,
     :param subnet_ids:
     :param security_groups:
     :param artifact_bucket:
+    :param fail_deployment_on_unsuccessful_ping:
+    :param slack_token:
+    :param slack_channel:
     :return: exit_code
     """
-
     if lambda_exists(function_name):
         function_version = _update_lambda(function_name, handler_filename,
                                           handler_function, folders, role,
                                           description, timeout, memory,
                                           subnet_ids, security_groups,
-                                          artifact_bucket=artifact_bucket)
+                                          artifact_bucket=artifact_bucket,
+                                          slack_token=slack_token,
+                                          slack_channel=slack_channel)
     else:
         exit_code = _install_dependencies_with_pip('requirements.txt',
                                                    './vendored')
@@ -292,12 +297,14 @@ def deploy_lambda(function_name, role, handler_filename, handler_function,
                                           handler_filename, handler_function,
                                           folders, description, timeout,
                                           memory, subnet_ids, security_groups,
-                                          artifact_bucket, zipfile)
+                                          artifact_bucket, zipfile,
+                                          slack_token=slack_token,
+                                          slack_channel=slack_channel)
     pong = ping(function_name, version=function_version)
     if 'alive' in pong:
         print(colored.green('Great you\'re already accepting a ping ' +
                             'in your Lambda function'))
-    elif fail_deploy_with_unsuccessfull_ping and not 'alive' in pong:
+    elif fail_deployment_on_unsuccessful_ping and not 'alive' in pong:
         print(colored.green('Pinging your lambda function failed'))
         # we do not deploy alias and fail command
         return 1
