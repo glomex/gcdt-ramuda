@@ -11,11 +11,12 @@ import subprocess
 import uuid
 import time
 from datetime import datetime, timedelta
-import boto3
 import json
-from clint.textui import colored, prompt
+
+import boto3
 from botocore.exceptions import ClientError as ClientError
 from clint.textui import colored
+
 from gcdt import monitoring
 from gcdt.ramuda_utils import make_zip_file_bytes, json2table, s3_upload, \
     lambda_exists, create_sha256, get_remote_code_hash, unit, \
@@ -251,7 +252,9 @@ def list_functions(out=sys.stdout):
 
 def deploy_lambda(function_name, role, handler_filename, handler_function,
                   folders, description, timeout, memory, subnet_ids=None,
-                  security_groups=None, artifact_bucket=None):
+                  security_groups=None, artifact_bucket=None,
+                  fail_deployment_on_unsuccessful_ping=False,
+                  slack_token=None, slack_channel='systemmessages'):
     """Create or update a lambda function.
 
     :param function_name:
@@ -265,23 +268,19 @@ def deploy_lambda(function_name, role, handler_filename, handler_function,
     :param subnet_ids:
     :param security_groups:
     :param artifact_bucket:
+    :param fail_deployment_on_unsuccessful_ping:
+    :param slack_token:
+    :param slack_channel:
     :return: exit_code
     """
-
     if lambda_exists(function_name):
         function_version = _update_lambda(function_name, handler_filename,
                                           handler_function, folders, role,
                                           description, timeout, memory,
                                           subnet_ids, security_groups,
-                                          artifact_bucket=artifact_bucket)
-        pong = ping(function_name, version=function_version)
-        if 'alive' in pong:
-            print(colored.green('Great you\'re already accepting a ping ' +
-                                'in your Lambda function'))
-        else:
-            print(colored.red('Please consider adding a reaction to a ' +
-                              'ping event to your lambda function'))
-        _deploy_alias(function_name, function_version)
+                                          artifact_bucket=artifact_bucket,
+                                          slack_token=slack_token,
+                                          slack_channel=slack_channel)
     else:
         exit_code = _install_dependencies_with_pip('requirements.txt',
                                                    './vendored')
@@ -298,16 +297,21 @@ def deploy_lambda(function_name, role, handler_filename, handler_function,
                                           handler_filename, handler_function,
                                           folders, description, timeout,
                                           memory, subnet_ids, security_groups,
-                                          artifact_bucket, zipfile)
-
-        pong = ping(function_name, version=function_version)
-        if 'alive' in pong:
-            print(colored.green('Great you\'re already accepting a ping ' +
-                                'in your Lambda function'))
-        else:
-            print(colored.red('Please consider adding a reaction to a ' +
-                              'ping event to your lambda function'))
-        _deploy_alias(function_name, function_version)
+                                          artifact_bucket, zipfile,
+                                          slack_token=slack_token,
+                                          slack_channel=slack_channel)
+    pong = ping(function_name, version=function_version)
+    if 'alive' in pong:
+        print(colored.green('Great you\'re already accepting a ping ' +
+                            'in your Lambda function'))
+    elif fail_deployment_on_unsuccessful_ping and not 'alive' in pong:
+        print(colored.green('Pinging your lambda function failed'))
+        # we do not deploy alias and fail command
+        return 1
+    else:
+        print(colored.red('Please consider adding a reaction to a ' +
+                          'ping event to your lambda function'))
+    _deploy_alias(function_name, function_version)
     return 0
 
 
