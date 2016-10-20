@@ -15,6 +15,8 @@ from glomex_utils.config_reader import read_lambda_config, read_config_if_exists
 from gcdt import utils
 from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
+    wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info
+from gcdt.utils import read_gcdt_user_config, get_context, get_command
     wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info, cleanup_bundle
 from gcdt.utils import read_gcdt_user_config, get_context, get_command, \
     read_gcdt_user_config_value
