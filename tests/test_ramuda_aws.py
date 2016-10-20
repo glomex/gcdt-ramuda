@@ -606,28 +606,10 @@ def test_rollback(vendored_folder, temp_lambda):
     alias_version = _get_alias_version(lambda_name, 'ACTIVE')
     assert_equal(alias_version, '$LATEST')
 
-
-    # try to rollback when previous version does not exist
-    exit_code = rollback(lambda_name, alias_name='ACTIVE')
-    assert_equal(exit_code, 1)
-
-    # version did not change
-    alias_version = _get_alias_version(lambda_name, 'ACTIVE')
-    assert_equal(alias_version, '1')
-
-    # roll back to the latest version
-    exit_code = rollback(lambda_name, alias_name='ACTIVE', version='$LATEST')
-    assert_equal(exit_code, 0)
-
-    # latest version of lambda is used
-    alias_version = _get_alias_version(lambda_name, 'ACTIVE')
-    assert_equal(alias_version, '$LATEST')
-
     # TODO: create more versions >5
     # TODO: do multiple rollbacks >5
     # TODO: verify version + active after rollback
     # TODO: verify invocations meet the right lamda_function version
-    # TODO: verify invocations meet the right lambda_function version
 
     # here we have the test for ramuda_utils.list_lambda_versions
     response = list_lambda_versions(lambda_name)

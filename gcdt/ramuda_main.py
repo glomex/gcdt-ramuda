@@ -17,6 +17,9 @@ from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
     wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info
 from gcdt.utils import read_gcdt_user_config, get_context, get_command
+    wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info, cleanup_bundle
+from gcdt.utils import read_gcdt_user_config, get_context, get_command, \
+    read_gcdt_user_config_value
 from gcdt.monitoring import datadog_notification, datadog_error, \
     datadog_event_detail
 
@@ -88,6 +91,8 @@ def main():
     elif arguments['deploy']:
         are_credentials_still_valid()
         slack_token, slack_channel = get_user_config()
+        fail_deployment_on_unsuccessful_ping = read_gcdt_user_config_value(
+            'ramuda.failDeploymentOnUnsuccessfulPing', False)
         conf = read_lambda_config()
         lambda_name = conf.get('lambda.name')
         lambda_description = conf.get('lambda.description')
