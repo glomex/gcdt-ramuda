@@ -9,7 +9,7 @@ from StringIO import StringIO
 import boto3
 import pytest
 from gcdt.logger import setup_logger
-from gcdt.ramuda_core import delete_lambda, deploy_lambda, \
+from gcdt.ramuda_core import delete_lambda, deploy_lambda, ping, \
     _lambda_add_time_schedule_event_source, \
     wire, unwire, _lambda_add_invoke_permission, list_functions, \
     _update_lambda_configuration, get_metrics, rollback, _get_alias_version
@@ -68,7 +68,8 @@ def temp_lambda():
     # create the function
     role_arn = create_lambda_role_helper(role_name)
     create_lambda_helper(lambda_name, role_arn,
-                         './resources/sample_lambda/handler.py')
+                         './resources/sample_lambda/handler.py',
+                         lambda_handler='handler.handle')
     yield lambda_name, role_name, role_arn
     # cleanup
     delete_lambda(lambda_name)
@@ -582,17 +583,33 @@ def test_rollback(vendored_folder, temp_lambda):
     alias_version = _get_alias_version(lambda_name, 'ACTIVE')
     assert_equal(alias_version, '$LATEST')
 
-    rollback(lambda_name, alias_name='ACTIVE', version='1')
+    exit_code = rollback(lambda_name, alias_name='ACTIVE')
+    assert_equal(exit_code, 0)
 
     # we rolled back to function_version 1
     alias_version = _get_alias_version(lambda_name, 'ACTIVE')
     assert_equal(alias_version, '1')
 
+    # try to rollback when previous version does not exist
+    exit_code = rollback(lambda_name, alias_name='ACTIVE')
+    assert_equal(exit_code, 1)
+
+    # version did not change
+    alias_version = _get_alias_version(lambda_name, 'ACTIVE')
+    assert_equal(alias_version, '1')
+
+    # roll back to the latest version
+    exit_code = rollback(lambda_name, alias_name='ACTIVE', version='$LATEST')
+    assert_equal(exit_code, 0)
+
+    # latest version of lambda is used
+    alias_version = _get_alias_version(lambda_name, 'ACTIVE')
+    assert_equal(alias_version, '$LATEST')
+
     # TODO: create more versions >5
     # TODO: do multiple rollbacks >5
     # TODO: verify version + active after rollback
-    # TODO: verify invocations meet the right lamda_function version
-    # TODO: rollback to last version!
+    # TODO: verify invocations meet the right lambda_function version
 
     # here we have the test for ramuda_utils.list_lambda_versions
     response = list_lambda_versions(lambda_name)
@@ -609,7 +626,7 @@ def test_get_remote_code_hash(vendored_folder, temp_lambda):
     handler_filename = './resources/sample_lambda/handler.py'
     folders_from_file = [
         {'source': './vendored', 'target': '.'},
-        {'source': './impl', 'target': 'impl'}
+        {'source': './resources/sample_lambda/impl', 'target': 'impl'}
     ]
 
     # get local hash
@@ -621,3 +638,25 @@ def test_get_remote_code_hash(vendored_folder, temp_lambda):
     time.sleep(10)
     remote_hash = get_remote_code_hash(lambda_name)
     assert_equal(remote_hash, expected_hash)
+
+
+@pytest.mark.aws
+@check_preconditions
+def test_ping(vendored_folder, temp_lambda):
+    log.info('running test_ping')
+
+    lambda_name = temp_lambda[0]
+    role_arn = temp_lambda[2]
+
+    # test the ping
+    response = ping(lambda_name)
+    assert response == '"alive"'
+
+    # update the function
+    create_lambda_helper(lambda_name, role_arn,
+                         './resources/sample_lambda/handler_no_ping.py',
+                         lambda_handler='handler_no_ping.handle')
+
+    # test has no ping
+    response = ping(lambda_name)
+    assert response == '{"ramuda_action": "ping"}'

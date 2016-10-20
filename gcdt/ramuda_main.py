@@ -7,20 +7,24 @@ Script to deploy Lambda functions to AWS
 
 from __future__ import print_function
 import sys
-from glomex_utils.config_reader import read_lambda_config, read_config_if_exists
+
 from docopt import docopt
+from clint.textui import colored
+
+from glomex_utils.config_reader import read_lambda_config, read_config_if_exists
 from gcdt import utils
 from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
-    wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info
-from gcdt.utils import read_gcdt_user_config, get_context, get_command
+    wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info, cleanup_bundle
+from gcdt.utils import read_gcdt_user_config, get_context, get_command, \
+    read_gcdt_user_config_value
 from gcdt.monitoring import datadog_notification, datadog_error, \
     datadog_event_detail
 
 log = setup_logger(logger_name='ramuda')
 
 # TODO introduce own config for account detection
-# TODO reupload on requirements.txt changes
+# TODO re-upload on requirements.txt changes
 # TODO manage log groups
 # TODO silence slacker
 # TODO fill description with git commit, jenkins build or local info
@@ -29,6 +33,7 @@ log = setup_logger(logger_name='ramuda')
 
 # creating docopt parameters and usage help
 DOC = '''Usage:
+        ramuda clean
         ramuda bundle
         ramuda deploy
         ramuda list
@@ -71,8 +76,9 @@ def main():
 
     context = get_context('ramuda', get_command(arguments))
     datadog_notification(context)
-
-    if arguments['list']:
+    if arguments['clean']:
+        cleanup_bundle()
+    elif arguments['list']:
         are_credentials_still_valid()
         exit_code = list_functions()
         log.debug('debug_test')
@@ -83,6 +89,8 @@ def main():
     elif arguments['deploy']:
         are_credentials_still_valid()
         slack_token, slack_channel = get_user_config()
+        fail_deployment_on_unsuccessful_ping = read_gcdt_user_config_value(
+            'ramuda.failDeploymentOnUnsuccessfulPing', False)
         conf = read_lambda_config()
         lambda_name = conf.get('lambda.name')
         lambda_description = conf.get('lambda.description')
@@ -100,7 +108,11 @@ def main():
                                   lambda_description, timeout,
                                   memory_size, subnet_ids=subnet_ids,
                                   security_groups=security_groups,
-                                  artifact_bucket=artifact_bucket)
+                                  artifact_bucket=artifact_bucket,
+                                  fail_deployment_on_unsuccessful_ping=
+                                  fail_deployment_on_unsuccessful_ping,
+                                  slack_token=slack_token,
+                                  slack_channel=slack_channel)
         event = 'ramuda bot: deployed lambda function: %s ' % lambda_name
         datadog_event_detail(context, event)
     elif arguments['delete']:
@@ -174,9 +186,12 @@ def main():
     elif arguments['ping']:
         are_credentials_still_valid()
         if arguments['<version>']:
-            ping(arguments['<lambda>'], version=arguments['<version>'])
+            response = ping(arguments['<lambda>'], version=arguments['<version>'])
         else:
-            ping(arguments['<lambda>'])
+            response = ping(arguments['<lambda>'])
+        if not response == '"alive"':
+            exit_code = 1
+            print(colored.red('Your lambda function did not respond to ping.'))
 
     if exit_code:
         datadog_error(context)

@@ -14,11 +14,13 @@ from nose.tools import assert_true, assert_false, assert_not_in, assert_in, \
 import pytest
 from testfixtures import LogCapture
 from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles
-from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda
+from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda, \
+    cleanup_bundle
 from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     aggregate_datapoints, json2table, create_sha256, ProgressPercentage, \
-    list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, get_bucket_from_s3_arn, \
-    build_filter_rules
+    list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, \
+    get_bucket_from_s3_arn, build_filter_rules
+
 from gcdt.logger import setup_logger
 
 log = setup_logger(logger_name='ramuda_test')
@@ -150,6 +152,19 @@ def test_bundle_lambda_exceeds_limit(temp_folder):
         )
 
     assert_equal(exit_code, 1)
+
+
+def test_cleanup_bundle(temp_folder):
+    os.environ['ENV'] = 'DEV'
+    paths_to_clean = ['vendored', 'bundle.zip']
+    for path in paths_to_clean:
+        if path.find('.') != -1:
+            open(path, 'a').close()
+        else:
+            os.mkdir(path)
+    cleanup_bundle()
+    for path in paths_to_clean:
+        assert not os.path.exists(path)
 
 
 def test_unit():

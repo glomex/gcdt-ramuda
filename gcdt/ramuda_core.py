@@ -6,15 +6,17 @@ Script to deploy Lambda functions to AWS
 
 from __future__ import print_function
 import sys
+import os, shutil
 import subprocess
 import uuid
 import time
 from datetime import datetime, timedelta
-import boto3
 import json
-from clint.textui import colored, prompt
+
+import boto3
 from botocore.exceptions import ClientError as ClientError
 from clint.textui import colored
+
 from gcdt import monitoring
 from gcdt.ramuda_utils import make_zip_file_bytes, json2table, s3_upload, \
     lambda_exists, create_sha256, get_remote_code_hash, unit, \
@@ -73,6 +75,37 @@ def _get_alias_version(function_name, alias_name):
         return response['FunctionVersion']
     except Exception:
         return
+
+
+def _get_version_from_response(func):
+    version = func['Version']
+    return int(version) if version.isdigit() else 0
+
+
+def _get_previous_version(function_name, alias_name):
+    client = boto3.client('lambda')
+    response = client.get_alias(
+        FunctionName = function_name,
+        Name=alias_name
+    )
+    current_version = response['FunctionVersion']
+    if current_version != '$LATEST':
+        return str(int(current_version) - 1)
+
+    max_version = 0
+    marker = None
+    request_more_versions = True
+    while request_more_versions:
+        kwargs = {'Marker': marker} if marker else {}
+        response = client.list_versions_by_function(FunctionName=function_name, **kwargs)
+        if 'Marker' not in response:
+            request_more_versions = False
+        else:
+            marker = response['Marker']
+        versions = map(_get_version_from_response, response['Versions'])
+        versions.append(max_version)
+        max_version = max(versions)
+    return str(max(0, max_version - 1))
 
 
 def _deploy_alias(function_name, function_version, alias_name=ALIAS_NAME):
@@ -219,7 +252,9 @@ def list_functions(out=sys.stdout):
 
 def deploy_lambda(function_name, role, handler_filename, handler_function,
                   folders, description, timeout, memory, subnet_ids=None,
-                  security_groups=None, artifact_bucket=None):
+                  security_groups=None, artifact_bucket=None,
+                  fail_deployment_on_unsuccessful_ping=False,
+                  slack_token=None, slack_channel='systemmessages'):
     """Create or update a lambda function.
 
     :param function_name:
@@ -233,23 +268,19 @@ def deploy_lambda(function_name, role, handler_filename, handler_function,
     :param subnet_ids:
     :param security_groups:
     :param artifact_bucket:
+    :param fail_deployment_on_unsuccessful_ping:
+    :param slack_token:
+    :param slack_channel:
     :return: exit_code
     """
-
     if lambda_exists(function_name):
         function_version = _update_lambda(function_name, handler_filename,
                                           handler_function, folders, role,
                                           description, timeout, memory,
                                           subnet_ids, security_groups,
-                                          artifact_bucket=artifact_bucket)
-        pong = ping(function_name, version=function_version)
-        if 'alive' in pong:
-            print(colored.green('Great you\'re already accepting a ping ' +
-                                'in your Lambda function'))
-        else:
-            print(colored.red('Please consider adding a reaction to a ' +
-                              'ping event to your lambda function'))
-        _deploy_alias(function_name, function_version)
+                                          artifact_bucket=artifact_bucket,
+                                          slack_token=slack_token,
+                                          slack_channel=slack_channel)
     else:
         exit_code = _install_dependencies_with_pip('requirements.txt',
                                                    './vendored')
@@ -266,16 +297,21 @@ def deploy_lambda(function_name, role, handler_filename, handler_function,
                                           handler_filename, handler_function,
                                           folders, description, timeout,
                                           memory, subnet_ids, security_groups,
-                                          artifact_bucket, zipfile)
-
-        pong = ping(function_name, version=function_version)
-        if 'alive' in pong:
-            print(colored.green('Great you\'re already accepting a ping ' +
-                                'in your Lambda function'))
-        else:
-            print(colored.red('Please consider adding a reaction to a ' +
-                              'ping event to your lambda function'))
-        _deploy_alias(function_name, function_version)
+                                          artifact_bucket, zipfile,
+                                          slack_token=slack_token,
+                                          slack_channel=slack_channel)
+    pong = ping(function_name, version=function_version)
+    if 'alive' in pong:
+        print(colored.green('Great you\'re already accepting a ping ' +
+                            'in your Lambda function'))
+    elif fail_deployment_on_unsuccessful_ping and not 'alive' in pong:
+        print(colored.green('Pinging your lambda function failed'))
+        # we do not deploy alias and fail command
+        return 1
+    else:
+        print(colored.red('Please consider adding a reaction to a ' +
+                          'ping event to your lambda function'))
+    _deploy_alias(function_name, function_version)
     return 0
 
 
@@ -507,30 +543,20 @@ def rollback(function_name, alias_name=ALIAS_NAME, version=None,
     :return: exit_code
     """
     if version:
-        print('rolling back to version %s' % version)
-        # for version in ramuda_utils.list_lambda_versions(function_name)['Versions']:
-        #    print version['Version']
-        _update_alias(function_name, version, alias_name)
-        message = ('ramuda bot: rolled back lambda function: ' +
-                   '%s to version %s' % (function_name, version))
-        monitoring.slack_notification(slack_channel, message, slack_token)
+        print('rolling back to version {}'.format(version))
+        message = 'ramuda bot: rolled back lambda function: {} to version %s'.format(function_name, version)
     else:
         print('rolling back to previous version')
-        client = boto3.client('lambda')
-        response = client.get_alias(
-            FunctionName=function_name,
-            Name=alias_name
-        )
+        version = _get_previous_version(function_name, alias_name)
+        if version == '0':
+            print('unable to find previous version of lambda function')
+            return 1
 
-        current_version = response['FunctionVersion']
-        print('current version is %s' % current_version)
-        version = str(int(current_version) - 1)
         print('new version is %s' % str(version))
-        _update_alias(function_name, version, alias_name)
+        message = 'ramuda bot: rolled back lambda function: {} to previous version'.format(function_name)
 
-        message = ('ramuda bot: rolled back lambda function: %s to ' +
-                   'previous version') % function_name
-        monitoring.slack_notification(slack_channel, message, slack_token)
+    _update_alias(function_name, version, alias_name)
+    monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
@@ -988,6 +1014,21 @@ def _remove_permission(function_name, statement_id, qualifier, lambda_client):
     response_remove = lambda_client.remove_permission(FunctionName=function_name,
                                                       StatementId=statement_id,
                                                       Qualifier=qualifier)
+
+
+def cleanup_bundle():
+    """Deletes files used for creating bundle.
+        * vendored/*
+        * bundle.zip
+    """
+    paths = ['./vendored', './bundle.zip']
+    for path in paths:
+        if os.path.exists(path):
+            log.debug("Deleting %s..." % path)
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
 
 
 def ping(function_name, alias_name=ALIAS_NAME, version=None):
