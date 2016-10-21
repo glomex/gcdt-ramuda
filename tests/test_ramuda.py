@@ -8,20 +8,21 @@ from tempfile import NamedTemporaryFile
 import textwrap
 import json
 import time
+
 from s3transfer.subscribers import BaseSubscriber
 from nose.tools import assert_true, assert_false, assert_not_in, assert_in, \
     assert_equal, assert_regexp_matches
 import pytest
 from testfixtures import LogCapture
-from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles
+
 from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda, \
     cleanup_bundle
 from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     aggregate_datapoints, json2table, create_sha256, ProgressPercentage, \
     list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, \
     get_bucket_from_s3_arn, build_filter_rules
-
 from gcdt.logger import setup_logger
+from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles
 
 log = setup_logger(logger_name='ramuda_test')
 

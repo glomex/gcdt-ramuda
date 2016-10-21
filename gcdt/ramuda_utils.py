@@ -5,18 +5,19 @@ import sys
 import io
 import shutil
 from functools import wraps
-import pathspec
 from zipfile import ZipFile, ZipInfo
 import time
 import warnings
 import threading
 import hashlib
 import base64
-import boto3
+
+import pathspec
 from boto3.s3.transfer import S3Transfer
 from clint.textui import colored
 from tabulate import tabulate
-from pyhocon import ConfigFactory, config_tree
+from pyhocon import config_tree
+
 from glomex_utils.config_reader import read_config
 from gcdt.logger import setup_logger
 from gcdt import utils
@@ -111,14 +112,14 @@ def check_buffer_exceeds_limit(buf):
 
 # TODO: move this to utils
 # TODO: maybe this should return True/False
-def are_credentials_still_valid():
+def are_credentials_still_valid(boto_session):
     """Check whether the credentials have expired.
 
     :return: exit_code
     """
-    client = boto3.client('lambda')
+    client_lambda = boto_session.client('lambda')
     try:
-        client.list_functions()
+        client_lambda.list_functions()
     except Exception as e:
         print(colored.red('Your credentials have expired... Please ' +
                           'renew and try again!'))
@@ -127,7 +128,7 @@ def are_credentials_still_valid():
 
 
 # TODO: is this used?
-def check_aws_credentials():
+def check_aws_credentials(boto_session):
     """
     A decorator that will check for valid credentials
     """
@@ -135,7 +136,7 @@ def check_aws_credentials():
     def wrapper(func):
         @wraps(func)
         def wrapped(*args, **kwargs):
-            exit_code = are_credentials_still_valid()
+            exit_code = are_credentials_still_valid(boto_session)
             if exit_code:
                 # TODO: remove exit()
                 sys.exit()
@@ -147,10 +148,10 @@ def check_aws_credentials():
     return wrapper
 
 
-def lambda_exists(lambda_name):
-    client = boto3.client('lambda')
+def lambda_exists(boto_session, lambda_name):
+    client_lambda = boto_session.client('lambda')
     try:
-        client.get_function(FunctionName=lambda_name)
+        client_lambda.get_function(FunctionName=lambda_name)
     except Exception as e:
         return False
     else:
@@ -174,9 +175,9 @@ def aggregate_datapoints(datapoints):
     return int(result)
 
 
-def list_lambda_versions(function_name):  # this is not used!!
-    client = boto3.client('lambda')
-    response = client.list_versions_by_function(
+def list_lambda_versions(boto_session, function_name):  # this is not used!!
+    client_lambda = boto_session.client('lambda')
+    response = client_lambda.list_versions_by_function(
         FunctionName=function_name,
     )
     log.debug(response)
@@ -223,9 +224,9 @@ def get_rule_name_from_event_arn(aws_event_arn):
     return full_rule.split('/')[1]
 
 
-def get_remote_code_hash(function_name):
-    client = boto3.client('lambda')
-    response = client.get_function_configuration(FunctionName=function_name)
+def get_remote_code_hash(boto_session, function_name):
+    client_lambda = boto_session.client('lambda')
+    response = client_lambda.get_function_configuration(FunctionName=function_name)
     return response['CodeSha256']
 
 
@@ -334,11 +335,11 @@ class ProgressPercentage(object):
 
 
 @utils.retries(3)
-def s3_upload(deploy_bucket, zipfile, lambda_name):
-    boto_session = boto3.session.Session()
+def s3_upload(boto_session, deploy_bucket, zipfile, lambda_name):
+    boto_session = boto_session.session.Session()
     region = boto_session.region_name
-    client = boto_session.client('s3')
-    transfer = S3Transfer(client)
+    client_s3 = boto_session.client('s3')
+    transfer = S3Transfer(client_s3)
     bucket = deploy_bucket
     git_hash = utils.get_git_revision_short_hash()
 
@@ -357,7 +358,7 @@ def s3_upload(deploy_bucket, zipfile, lambda_name):
     # print 'uploading took:'
     # print(end - start)
 
-    response = client.head_object(Bucket=bucket, Key=dest_key)
+    response = client_s3.head_object(Bucket=bucket, Key=dest_key)
     # print '\n'
     # print response['ETag']
     # print response['VersionId']
