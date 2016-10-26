@@ -93,15 +93,16 @@ def cleanup_lambdas(boto_session):
         delete_lambda(boto_session, i)
 
 
-'''
 @pytest.mark.aws
 @check_preconditions
-def test_create_lambda(vendored_folder, cleanup_lambdas, cleanup_roles):
+def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
+                       cleanup_roles):
     log.info('running test_create_lambda')
-    temp_string = random_string()
+    temp_string = helpers.random_string()
     lambda_name = 'jenkins_test_' + temp_string
     log.info(lambda_name)
     role = create_role_helper(
+        boto_session,
         'unittest_%s_lambda' % temp_string,
         policies=[
             'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole',
@@ -171,29 +172,33 @@ def test_create_lambda(vendored_folder, cleanup_lambdas, cleanup_roles):
     region = conf.get('deployment.region')
     artifact_bucket = conf.get('deployment.artifactBucket', None)
 
-    deploy_lambda(function_name=lambda_name,
-                  role=role_arn,
-                  handler_filename=handler_filename,
-                  handler_function=lambda_handler,
-                  folders=folders_from_file,
-                  description=lambda_description,
-                  timeout=timeout,
-                  memory=memory_size,
-                  artifact_bucket=artifact_bucket)
-
+    deploy_lambda(
+        boto_session=boto_session,
+        function_name=lambda_name,
+        role=role_arn,
+        handler_filename=handler_filename,
+        handler_function=lambda_handler,
+        folders=folders_from_file,
+        description=lambda_description,
+        timeout=timeout,
+        memory=memory_size,
+        artifact_bucket=artifact_bucket
+    )
     # TODO improve this (by using a waiter??)
     cleanup_lambdas.append(lambda_name)
 
 
 @pytest.mark.aws
 @check_preconditions
-def test_create_lambda_with_s3(vendored_folder, cleanup_lambdas, cleanup_roles):
+def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
+                               cleanup_roles):
     log.info('running test_create_lambda_with_s3')
     account = os.getenv('ACCOUNT')
-    temp_string = random_string()
+    temp_string = helpers.random_string()
     lambda_name = 'jenkins_test_' + temp_string
     log.info(lambda_name)
     role = create_role_helper(
+        boto_session,
         'unittest_%s_lambda' % temp_string,
         policies=[
             'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole',
@@ -262,18 +267,19 @@ def test_create_lambda_with_s3(vendored_folder, cleanup_lambdas, cleanup_roles):
     region = conf.get('deployment.region')
     artifact_bucket = conf.get('deployment.artifactBucket', None)
 
-    deploy_lambda(function_name=lambda_name,
-                  role=role_arn,
-                  handler_filename=handler_filename,
-                  handler_function=lambda_handler,
-                  folders=folders_from_file,
-                  description=lambda_description,
-                  timeout=timeout,
-                  memory=memory_size,
-                  artifact_bucket=artifact_bucket)
-
+    deploy_lambda(
+        boto_session=boto_session,
+        function_name=lambda_name,
+        role=role_arn,
+        handler_filename=handler_filename,
+        handler_function=lambda_handler,
+        folders=folders_from_file,
+        description=lambda_description,
+        timeout=timeout,
+        memory=memory_size,
+        artifact_bucket=artifact_bucket
+    )
     cleanup_lambdas.append(lambda_name)
-'''
 
 
 @pytest.mark.aws
