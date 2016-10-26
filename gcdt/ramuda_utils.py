@@ -280,7 +280,7 @@ def get_packages_to_ignore(folder, ramuda_ignore_file):
 
 def cleanup_folder(path, ramuda_ignore_file=None):
     # this cleans up the ./vendored (path) folder
-    # exclude locally installed packages from lambda container
+    # exclude locally installed gcdt_develop from lambda container
     print('path: %s' % path)
     matches = get_packages_to_ignore(path, ramuda_ignore_file)
     result_set = set()
