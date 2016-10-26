@@ -471,7 +471,7 @@ def _update_lambda_function_code(boto_session, function_name, handler_filename,
             # print 'uploading bundle to s3'
             # reuse the zipfile we already created!
             dest_key, e_tag, version_id = \
-                s3_upload(artifact_bucket, zipfile, function_name)
+                s3_upload(boto_session, artifact_bucket, zipfile, function_name)
             # print dest_key, e_tag, version_id
             response = client_lambda.update_function_code(
                 FunctionName=function_name,
