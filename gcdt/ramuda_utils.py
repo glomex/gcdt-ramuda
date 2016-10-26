@@ -336,7 +336,6 @@ class ProgressPercentage(object):
 
 @utils.retries(3)
 def s3_upload(boto_session, deploy_bucket, zipfile, lambda_name):
-    boto_session = boto_session.session.Session()
     region = boto_session.region_name
     client_s3 = boto_session.client('s3')
     transfer = S3Transfer(client_s3)
