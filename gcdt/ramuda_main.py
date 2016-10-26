@@ -16,7 +16,8 @@ from glomex_utils.config_reader import read_lambda_config, read_config_if_exists
 from gcdt import utils
 from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
-    wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info
+    wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info, \
+    cleanup_bundle
 from gcdt.utils import read_gcdt_user_config, get_context, get_command, \
     read_gcdt_user_config_value
 from gcdt.monitoring import datadog_notification, datadog_error, \
@@ -88,7 +89,7 @@ def main():
         log.info('info_test')
     elif arguments['metrics']:
         are_credentials_still_valid(boto_session)
-        exit_code = get_metrics(arguments['<lambda>'])
+        exit_code = get_metrics(boto_session, arguments['<lambda>'])
     elif arguments['deploy']:
         are_credentials_still_valid(boto_session)
         slack_token, slack_channel = get_user_config()
