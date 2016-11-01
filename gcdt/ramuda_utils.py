@@ -5,7 +5,7 @@ import sys
 import io
 import shutil
 from functools import wraps
-from zipfile import ZipFile, ZipInfo
+from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 import time
 import warnings
 import threading
@@ -70,7 +70,7 @@ def make_zip_file_bytes(paths, handler, settings='settings'):
     # TODO: also exclude *.pyc
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with ZipFile(buf, 'w') as z:
+        with ZipFile(buf, 'w', ZIP_DEFLATED) as z:
             z.debug = 0
             for path in paths:
                 path_to_zip = path.get('source')
