@@ -104,7 +104,7 @@ def test_bundle_lambda(temp_folder):
         {'source': './vendored', 'target': '.'},
         {'source': './impl', 'target': 'impl'}
     ]
-    prebundle_scripts = [here('resources/sample_prebundle_ramuda_script/sample_script.sh')]
+    prebundle_scripts = [here('resources/sample_lambda_with_prebundle/sample_script.sh')]
     os.environ['ENV'] = 'DEV'
     os.mkdir('./vendored')
     os.mkdir('./impl')
