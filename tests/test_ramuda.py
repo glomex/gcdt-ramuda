@@ -11,7 +11,7 @@ import time
 
 from s3transfer.subscribers import BaseSubscriber
 from nose.tools import assert_true, assert_false, assert_not_in, assert_in, \
-    assert_equal, assert_regexp_matches
+    assert_equal, assert_regexp_matches, assert_less
 import pytest
 from testfixtures import LogCapture
 
@@ -22,7 +22,7 @@ from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, \
     get_bucket_from_s3_arn, build_filter_rules
 from gcdt.logger import setup_logger
-from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles
+from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles, here
 
 log = setup_logger(logger_name='ramuda_test')
 
@@ -104,6 +104,7 @@ def test_bundle_lambda(temp_folder):
         {'source': './vendored', 'target': '.'},
         {'source': './impl', 'target': 'impl'}
     ]
+    prebundle_scripts = [here('resources/sample_lambda_with_prebundle/sample_script.sh')]
     os.environ['ENV'] = 'DEV'
     os.mkdir('./vendored')
     os.mkdir('./impl')
@@ -117,8 +118,14 @@ def test_bundle_lambda(temp_folder):
     with open('./impl/bigfile', 'wb') as bigfile:
         print(bigfile.name)
         bigfile.write(os.urandom(1000000))  # 1 MB
-    exit_code = bundle_lambda('./handler.py', folders_from_file)
+    exit_code = bundle_lambda('./handler.py', folders_from_file, prebundle_scripts)
     assert_equal(exit_code, 0)
+
+    assert_true(os.path.isfile('test_ramuda_prebundle.txt'))
+
+    zipped_size = os.path.getsize('bundle.zip')
+    unzipped_size = get_size('vendored') + get_size('impl') + os.path.getsize('handler.py')
+    assert_less(zipped_size, unzipped_size)
 
 
 @pytest.mark.slow

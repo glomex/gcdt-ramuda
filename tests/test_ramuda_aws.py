@@ -17,7 +17,7 @@ from gcdt.ramuda_core import delete_lambda, deploy_lambda, ping, \
     _update_lambda_configuration, get_metrics, rollback, _get_alias_version
 from gcdt.ramuda_utils import list_lambda_versions, make_zip_file_bytes, \
     create_sha256, get_remote_code_hash
-from .helpers import cleanup_tempfiles
+from .helpers import cleanup_tempfiles, temp_folder
 from . import helpers
 from .helpers_aws import create_role_helper, delete_role_helper, \
     create_lambda_helper, create_lambda_role_helper, check_preconditions, \
@@ -684,3 +684,41 @@ def test_ping(boto_session, vendored_folder, temp_lambda):
     # test has no ping
     response = ping(boto_session, lambda_name)
     assert response == '{"ramuda_action": "ping"}'
+
+
+@pytest.mark.aws
+@check_preconditions
+def test_prebundle(boto_session, temp_folder, cleanup_lambdas, cleanup_roles):
+    log.info('running test_prebundle')
+
+    temp_string = helpers.random_string()
+    lambda_name = 'jenkins_test_%s' % temp_string
+    role_name = 'unittest_%s_lambda' % temp_string
+    role_arn = create_lambda_role_helper(boto_session, role_name)
+    cleanup_roles.append(role_name)
+
+    script = lambda r: here('resources/sample_lambda_with_prebundle/{}.sh'.format(r))
+    with open(here('resources/sample_lambda_with_prebundle/lambda.conf.tpl')) as template:
+        config_string = template.read() % (
+            script('create_requirements'),
+            script('create_handler'),
+            script('create_settings')
+        )
+    conf = ConfigFactory.parse_string(config_string)
+
+    deploy_lambda(
+        boto_session=boto_session,
+        role=role_arn,
+        function_name=lambda_name,
+        handler_filename=conf.get('lambda.handlerFile'),
+        handler_function=conf.get('lambda.handlerFunction'),
+        description=conf.get('lambda.description'),
+        timeout=conf.get('lambda.timeout'),
+        memory=conf.get('lambda.memorySize'),
+        folders=conf.get('bundling.folders'),
+        prebundle_scripts=conf.get('bundling.preBundle')
+    )
+    cleanup_lambdas.append(lambda_name)
+
+    response = ping(boto_session, lambda_name)
+    assert response == '"alive"'

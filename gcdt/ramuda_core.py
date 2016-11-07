@@ -16,7 +16,7 @@ import json
 from botocore.exceptions import ClientError as ClientError
 from clint.textui import colored
 
-from gcdt import monitoring
+from gcdt import monitoring, utils
 from gcdt.ramuda_utils import make_zip_file_bytes, json2table, s3_upload, \
     lambda_exists, create_sha256, get_remote_code_hash, unit, \
     aggregate_datapoints, check_buffer_exceeds_limit, list_of_dict_equals, \
@@ -265,7 +265,7 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
                   folders, description, timeout, memory, subnet_ids=None,
                   security_groups=None, artifact_bucket=None,
                   fail_deployment_on_unsuccessful_ping=False,
-                  slack_token=None, slack_channel='systemmessages'):
+                  slack_token=None, slack_channel='systemmessages', prebundle_scripts=None):
     """Create or update a lambda function.
 
     :param boto_session:
@@ -293,18 +293,12 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
                                           subnet_ids, security_groups,
                                           artifact_bucket=artifact_bucket,
                                           slack_token=slack_token,
-                                          slack_channel=slack_channel)
+                                          slack_channel=slack_channel,
+                                          prebundle_scripts=prebundle_scripts)
     else:
-        exit_code = _install_dependencies_with_pip('requirements.txt',
-                                                   './vendored')
-        if exit_code:
+        zipfile = _get_zipped_file(handler_filename, folders, prebundle_scripts=prebundle_scripts)
+        if not zipfile:
             return 1
-        # create zipfile before calling into _create_lambda!
-        zipfile = make_zip_file_bytes(handler=handler_filename,
-                                      paths=folders)
-        if check_buffer_exceeds_limit(zipfile):
-            return 1
-        # TODO: check this!
         log.info('buffer size: %0.2f MB' % float(len(zipfile) / 1000000.0))
         function_version = _create_lambda(boto_session, function_name, role,
                                           handler_filename, handler_function,
@@ -326,6 +320,24 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
                           'ping event to your lambda function'))
     _deploy_alias(boto_session, function_name, function_version)
     return 0
+
+
+def _get_zipped_file(handler_filename, folders, prebundle_scripts=None):
+    if prebundle_scripts:
+        prebundle_failed = utils.execute_scripts(prebundle_scripts)
+        if prebundle_failed:
+            return
+
+    install_failed = _install_dependencies_with_pip('requirements.txt', './vendored')
+    if install_failed:
+        return
+
+    zipfile = make_zip_file_bytes(handler=handler_filename, paths=folders)
+    size_limit_exceeded = check_buffer_exceeds_limit(zipfile)
+    if size_limit_exceeded:
+        return
+
+    return zipfile
 
 
 def _create_lambda(boto_session, function_name, role, handler_filename,
@@ -405,10 +417,10 @@ def _update_lambda(boto_session, function_name, handler_filename,
                    handler_function, folders,
                    role, description, timeout, memory, subnet_ids=None,
                    security_groups=None, artifact_bucket=None,
-                   slack_token=None, slack_channel='systemmessages'):
+                   slack_token=None, slack_channel='systemmessages', prebundle_scripts=None):
     log.debug('update lambda function: %s' % function_name)
-    _update_lambda_function_code(boto_session, function_name, handler_filename,
-                                 folders, artifact_bucket=artifact_bucket)
+    _update_lambda_function_code(boto_session, function_name, handler_filename, folders,
+                                 artifact_bucket=artifact_bucket, prebundle_scripts=prebundle_scripts)
     function_version = \
         _update_lambda_configuration(
             boto_session, function_name, role, handler_function,
@@ -419,36 +431,28 @@ def _update_lambda(boto_session, function_name, handler_filename,
     return function_version
 
 
-def bundle_lambda(handler_filename, folders):
+def bundle_lambda(handler_filename, folders, prebundle_scripts=None):
     """Prepare a zip file for the lambda function and dependencies.
 
     :param handler_filename:
     :param folders:
     :return: exit_code
     """
-    exit_code = _install_dependencies_with_pip('requirements.txt', './vendored')
-    if exit_code:
-        return 1
-    zip_bytes = make_zip_file_bytes(
-        handler=handler_filename, paths=folders)
-    if check_buffer_exceeds_limit(zip_bytes):
+
+    zipfile = _get_zipped_file(handler_filename, folders, prebundle_scripts=prebundle_scripts)
+    if not zipfile:
         return 1
     with open('bundle.zip', 'wb') as zfile:
-        zfile.write(zip_bytes)
+        zfile.write(zipfile)
     print('Finished - a bundle.zip is waiting for you...')
     return 0
 
 
 def _update_lambda_function_code(boto_session, function_name, handler_filename,
-                                 folders, artifact_bucket=None):
+                                 folders, artifact_bucket=None, prebundle_scripts=None):
     client_lambda = boto_session.client('lambda')
-    exit_code = _install_dependencies_with_pip('requirements.txt', './vendored')
-    if exit_code:
-        return 1
-    # client_lambda = boto3.client('lambda')
-    # we need the zipfile to create the local_hash!
-    zipfile = make_zip_file_bytes(handler=handler_filename, paths=folders)
-    if check_buffer_exceeds_limit(zipfile):
+    zipfile = _get_zipped_file(handler_filename, folders, prebundle_scripts=prebundle_scripts)
+    if not zipfile:
         return 1
     local_hash = create_sha256(zipfile)
     # print ('getting remote hash')
@@ -466,9 +470,7 @@ def _update_lambda_function_code(boto_session, function_name, handler_filename,
                 ZipFile=zipfile,
                 Publish=True
             )
-            print(json2table(response))
         else:
-            # print 'uploading bundle to s3'
             # reuse the zipfile we already created!
             dest_key, e_tag, version_id = \
                 s3_upload(boto_session, artifact_bucket, zipfile, function_name)
@@ -480,7 +482,7 @@ def _update_lambda_function_code(boto_session, function_name, handler_filename,
                 S3ObjectVersion=version_id,
                 Publish=True
             )
-            print(json2table(response))
+        print(json2table(response))
     return 0
 
 
