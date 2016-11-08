@@ -226,6 +226,8 @@ def _install_dependencies_with_pip(requirements_file, destination_folder):
     directory
     :return: exit_code
     """
+    if not os.path.isfile(requirements_file):
+        return 0
     # TODO: not convinced that subprocess is the best way to call a python tool
     cmd = ['pip', 'install', '-r', requirements_file, '-t', destination_folder]
 
