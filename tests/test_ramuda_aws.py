@@ -21,7 +21,7 @@ from .helpers import cleanup_tempfiles, temp_folder
 from . import helpers
 from .helpers_aws import create_role_helper, delete_role_helper, \
     create_lambda_helper, create_lambda_role_helper, check_preconditions, \
-    temp_bucket, boto_session
+    temp_bucket, boto_session, settings_requirements
 
 
 log = setup_logger(logger_name='ramuda_test_aws')
@@ -98,7 +98,7 @@ def cleanup_lambdas(boto_session):
 @pytest.mark.aws
 @check_preconditions
 def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
-                       cleanup_roles):
+                       cleanup_roles, settings_requirements):
     log.info('running test_create_lambda')
     temp_string = helpers.random_string()
     lambda_name = 'jenkins_test_' + temp_string
@@ -194,7 +194,7 @@ def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
 @pytest.mark.aws
 @check_preconditions
 def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
-                               cleanup_roles):
+                               cleanup_roles, settings_requirements):
     log.info('running test_create_lambda_with_s3')
     account = os.getenv('ACCOUNT')
     temp_string = helpers.random_string()
