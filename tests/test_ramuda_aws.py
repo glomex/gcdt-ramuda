@@ -52,6 +52,7 @@ def vendored_folder():
     cwd = (os.getcwd())
     folder = here('.')
     os.chdir(folder)  # reuse ./vendored folder => cd tests/
+    settings_requirements()
     yield
     # cleanup
     os.chdir(cwd)  # cd to original folder
@@ -98,7 +99,7 @@ def cleanup_lambdas(boto_session):
 @pytest.mark.aws
 @check_preconditions
 def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
-                       cleanup_roles, settings_requirements):
+                       cleanup_roles):
     log.info('running test_create_lambda')
     temp_string = helpers.random_string()
     lambda_name = 'jenkins_test_' + temp_string
@@ -194,7 +195,7 @@ def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
 @pytest.mark.aws
 @check_preconditions
 def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
-                               cleanup_roles, settings_requirements):
+                               cleanup_roles):
     log.info('running test_create_lambda_with_s3')
     account = os.getenv('ACCOUNT')
     temp_string = helpers.random_string()
