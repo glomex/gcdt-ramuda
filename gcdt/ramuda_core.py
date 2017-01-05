@@ -789,9 +789,8 @@ def _ensure_s3_event(boto_session, s3_event_source, function_name, alias_name,
             for rule in filter_rules:
                 print(colored.magenta(
                     '\t\t{}: {}'.format(rule['Name'], rule['Value'])))
-            _remove_permission(function_name, permission_exists, alias_name,
-                               boto_session.client('lambda'))
-            _remove_events_from_s3_bucket(bucket_name, target_lambda_arn,
+            _remove_permission(boto_session, function_name, permission_exists, alias_name)
+            _remove_events_from_s3_bucket(boto_session, bucket_name, target_lambda_arn,
                                           filter_rules)
 
 
