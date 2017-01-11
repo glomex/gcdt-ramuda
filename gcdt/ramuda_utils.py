@@ -18,7 +18,7 @@ from clint.textui import colored
 from tabulate import tabulate
 from pyhocon import config_tree
 
-from glomex_utils.config_reader import read_config
+from .config_reader import read_config
 from gcdt.logger import setup_logger
 from gcdt import utils
 
