@@ -95,7 +95,6 @@ def cleanup_lambdas(boto_session):
 
 # Could not open requirements file: [Errno 2] No such file or directory:
 # 'requirements.txt'
-'''
 @pytest.mark.aws
 @check_preconditions
 def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
@@ -129,21 +128,22 @@ def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
                     type = "s3:ObjectCreated:*" , suffix=".gz"
                 }]
                 timeSchedules = [{
-                    ruleName = "dp-dev-sample-lambda-jobr-T1",
+                    ruleName = "infra-dev-sample-lambda-jobr-T1",
                     ruleDescription = "run every 5 min from 0-5",
                     scheduleExpression = "cron(0/5 0-5 ? * * *)"
                 },
                 {
-                    ruleName = "dp-dev-sample-lambda-jobr-T2",
+                    ruleName = "infra-dev-sample-lambda-jobr-T2",
                     ruleDescription = "run every 5 min from 8-23:59",
                     scheduleExpression = "cron(0/5 8-23:59 ? * * *)"
                 }]
             }
 
             vpc {
-                subnetIds = ["subnet-87685dde", "subnet-9f39ccfb",
-                    "subnet-166d7061"]
-                securityGroups = ["sg-ae6850ca"]
+                subnetIds = [
+                    "subnet-d5ffb0b1", "subnet-d5ffb0b1", "subnet-d5ffb0b1",
+                    "subnet-e9db9f9f"]
+                securityGroups = ["sg-660dd700"]
             }
         }
 
@@ -224,11 +224,11 @@ def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
                     type = "s3:ObjectCreated:*" , suffix=".gz"
                 }]
                 timeSchedules = [{
-                    ruleName = "dp-dev-sample-lambda-jobr-T1",
+                    ruleName = "infra-dev-sample-lambda-jobr-T1",
                     ruleDescription = "run every 5 min from 0-5",
                     scheduleExpression = "cron(0/5 0-5 ? * * *)"
                 },{
-                    ruleName = "dp-dev-sample-lambda-jobr-T2",
+                    ruleName = "infra-dev-sample-lambda-jobr-T2",
                     ruleDescription = "run every 5 min from 8-23:59",
                     scheduleExpression = "cron(0/5 8-23:59 ? * * *)"
                 }]
@@ -236,9 +236,10 @@ def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
 
 
             vpc {
-                subnetIds = ["subnet-87685dde", "subnet-9f39ccfb",
-                    "subnet-166d7061"]
-                securityGroups = ["sg-ae6850ca"]
+                subnetIds = [
+                    "subnet-d5ffb0b1", "subnet-d5ffb0b1", "subnet-d5ffb0b1",
+                    "subnet-e9db9f9f"]
+                securityGroups = ["sg-660dd700"]
             }
 
         }
@@ -283,7 +284,6 @@ def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
         artifact_bucket=artifact_bucket
     )
     cleanup_lambdas.append(lambda_name)
-'''
 
 
 @pytest.mark.aws
