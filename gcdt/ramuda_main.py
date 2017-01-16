@@ -108,6 +108,7 @@ def main():
         subnet_ids = conf.get('lambda.vpc.subnetIds', None)
         security_groups = conf.get('lambda.vpc.securityGroups', None)
         artifact_bucket = conf.get('deployment.artifactBucket', None)
+        runtime = conf.get('lambda.runtime', 'python2.7')
         exit_code = deploy_lambda(
             boto_session, lambda_name, role_arn, handler_filename,
             lambda_handler, folders_from_file,
@@ -119,7 +120,8 @@ def main():
             fail_deployment_on_unsuccessful_ping,
             slack_token=slack_token,
             slack_channel=slack_channel,
-            prebundle_scripts=prebundle_scripts
+            prebundle_scripts=prebundle_scripts,
+            runtime=runtime
         )
         event = 'ramuda bot: deployed lambda function: %s ' % lambda_name
         datadog_event_detail(context, event)
@@ -178,10 +180,12 @@ def main():
         datadog_event_detail(context, event)
     elif arguments['bundle']:
         conf = read_lambda_config()
+        runtime = conf.get('lambda.runtime', 'python2.7')
         handler_filename = conf.get('lambda.handlerFile')
         folders_from_file = conf.get('bundling.folders')
         prebundle_scripts = conf.get('bundling.preBundle', None)
-        exit_code = bundle_lambda(handler_filename, folders_from_file, prebundle_scripts)
+        exit_code = bundle_lambda(handler_filename, folders_from_file,
+                                  prebundle_scripts, runtime)
     elif arguments['rollback']:
         are_credentials_still_valid(boto_session)
         slack_token, slack_channel = get_user_config()

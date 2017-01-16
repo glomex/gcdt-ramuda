@@ -242,6 +242,25 @@ def _install_dependencies_with_pip(requirements_file, destination_folder):
     return 0
 
 
+def _install_dependencies_with_npm():
+    """installs dependencies from a package.json file
+
+    :return: exit_code
+    """
+    if not os.path.isfile('package.json'):
+        return 0
+    cmd = ['npm', 'install']
+
+    try:
+        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write(
+            '\033[01;31mError running command: %s resulted in the ' % e.cmd +
+            'following error: \033[01;32m %s' % e.output)
+        return 1
+    return 0
+
+
 def list_functions(boto_session, out=sys.stdout):
     """List the deployed lambda functions and print configuration.
 
@@ -267,7 +286,8 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
                   folders, description, timeout, memory, subnet_ids=None,
                   security_groups=None, artifact_bucket=None,
                   fail_deployment_on_unsuccessful_ping=False,
-                  slack_token=None, slack_channel='systemmessages', prebundle_scripts=None):
+                  slack_token=None, slack_channel='systemmessages',
+                  prebundle_scripts=None, runtime='python2.7'):
     """Create or update a lambda function.
 
     :param boto_session:
@@ -285,6 +305,7 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
     :param fail_deployment_on_unsuccessful_ping:
     :param slack_token:
     :param slack_channel:
+    :param runtime:
     :return: exit_code
     """
     if lambda_exists(boto_session, function_name):
@@ -296,9 +317,12 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
                                           artifact_bucket=artifact_bucket,
                                           slack_token=slack_token,
                                           slack_channel=slack_channel,
-                                          prebundle_scripts=prebundle_scripts)
+                                          prebundle_scripts=prebundle_scripts,
+                                          runtime=runtime)
     else:
-        zipfile = _get_zipped_file(handler_filename, folders, prebundle_scripts=prebundle_scripts)
+        zipfile = _get_zipped_file(handler_filename, folders,
+                                   prebundle_scripts=prebundle_scripts,
+                                   runtime=runtime)
         if not zipfile:
             return 1
         log.info('buffer size: %0.2f MB' % float(len(zipfile) / 1000000.0))
@@ -308,7 +332,8 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
                                           memory, subnet_ids, security_groups,
                                           artifact_bucket, zipfile,
                                           slack_token=slack_token,
-                                          slack_channel=slack_channel)
+                                          slack_channel=slack_channel,
+                                          runtime=runtime)
     pong = ping(boto_session, function_name, version=function_version)
     if 'alive' in pong:
         print(colored.green('Great you\'re already accepting a ping ' +
@@ -324,15 +349,23 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
     return 0
 
 
-def _get_zipped_file(handler_filename, folders, prebundle_scripts=None):
+def _get_zipped_file(handler_filename, folders, prebundle_scripts=None,
+                     runtime='python2.7'):
     if prebundle_scripts:
         prebundle_failed = utils.execute_scripts(prebundle_scripts)
         if prebundle_failed:
             return
 
-    install_failed = _install_dependencies_with_pip('requirements.txt', './vendored')
-    if install_failed:
-        return
+    if runtime == 'python2.7':
+        install_failed = \
+            _install_dependencies_with_pip('requirements.txt', './vendored')
+        if install_failed:
+            return
+    elif runtime == 'nodejs4.3':
+        install_failed = \
+            _install_dependencies_with_npm()
+        if install_failed:
+            return
 
     zipfile = make_zip_file_bytes(handler=handler_filename, paths=folders)
     size_limit_exceeded = check_buffer_exceeds_limit(zipfile)
@@ -347,7 +380,7 @@ def _create_lambda(boto_session, function_name, role, handler_filename,
                    folders, description, timeout, memory,
                    subnet_ids=None, security_groups=None,
                    artifact_bucket=None, zipfile=None, slack_token=None,
-                   slack_channel='systemmessages'):
+                   slack_channel='systemmessages', runtime='python2.7'):
     log.debug('create lambda function: %s' % function_name)
     # move to caller!
     # _install_dependencies_with_pip('requirements.txt', './vendored')
@@ -359,7 +392,7 @@ def _create_lambda(boto_session, function_name, role, handler_filename,
         log.debug('create without artifact bucket...')
         response = client_lambda.create_function(
             FunctionName=function_name,
-            Runtime='python2.7',
+            Runtime=runtime,
             Role=role,
             Handler=handler_function,
             Code={
@@ -378,7 +411,7 @@ def _create_lambda(boto_session, function_name, role, handler_filename,
         # print dest_key, e_tag, version_id
         response = client_lambda.create_function(
             FunctionName=function_name,
-            Runtime='python2.7',
+            Runtime=runtime,
             Role=role,
             Handler=handler_function,
             Code={
@@ -419,10 +452,13 @@ def _update_lambda(boto_session, function_name, handler_filename,
                    handler_function, folders,
                    role, description, timeout, memory, subnet_ids=None,
                    security_groups=None, artifact_bucket=None,
-                   slack_token=None, slack_channel='systemmessages', prebundle_scripts=None):
+                   slack_token=None, slack_channel='systemmessages',
+                   prebundle_scripts=None, runtime='python2.7'):
     log.debug('update lambda function: %s' % function_name)
-    _update_lambda_function_code(boto_session, function_name, handler_filename, folders,
-                                 artifact_bucket=artifact_bucket, prebundle_scripts=prebundle_scripts)
+    _update_lambda_function_code(boto_session, function_name, handler_filename,
+                                 folders, artifact_bucket=artifact_bucket,
+                                 prebundle_scripts=prebundle_scripts,
+                                 runtime=runtime)
     function_version = \
         _update_lambda_configuration(
             boto_session, function_name, role, handler_function,
@@ -433,7 +469,8 @@ def _update_lambda(boto_session, function_name, handler_filename,
     return function_version
 
 
-def bundle_lambda(handler_filename, folders, prebundle_scripts=None):
+def bundle_lambda(handler_filename, folders, prebundle_scripts=None,
+                  runtime='python2.7'):
     """Prepare a zip file for the lambda function and dependencies.
 
     :param handler_filename:
@@ -441,7 +478,9 @@ def bundle_lambda(handler_filename, folders, prebundle_scripts=None):
     :return: exit_code
     """
 
-    zipfile = _get_zipped_file(handler_filename, folders, prebundle_scripts=prebundle_scripts)
+    zipfile = _get_zipped_file(handler_filename, folders,
+                               prebundle_scripts=prebundle_scripts,
+                               runtime=runtime)
     if not zipfile:
         return 1
     with open('bundle.zip', 'wb') as zfile:
@@ -450,10 +489,13 @@ def bundle_lambda(handler_filename, folders, prebundle_scripts=None):
     return 0
 
 
-def _update_lambda_function_code(boto_session, function_name, handler_filename,
-                                 folders, artifact_bucket=None, prebundle_scripts=None):
+def _update_lambda_function_code(
+        boto_session, function_name, handler_filename, folders,
+        artifact_bucket=None, prebundle_scripts=None, runtime='python2.7'):
     client_lambda = boto_session.client('lambda')
-    zipfile = _get_zipped_file(handler_filename, folders, prebundle_scripts=prebundle_scripts)
+    zipfile = _get_zipped_file(handler_filename, folders,
+                               prebundle_scripts=prebundle_scripts,
+                               runtime=runtime)
     if not zipfile:
         return 1
     local_hash = create_sha256(zipfile)
