@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function
 import os
+import shutil
 import textwrap
 import time
 from StringIO import StringIO
@@ -19,6 +20,7 @@ from gcdt.ramuda_utils import list_lambda_versions, make_zip_file_bytes, \
     create_sha256, get_remote_code_hash
 from .helpers import cleanup_tempfiles, temp_folder
 from . import helpers
+from .helpers import temp_folder
 from .helpers_aws import create_role_helper, delete_role_helper, \
     create_lambda_helper, create_lambda_role_helper, check_preconditions, \
     temp_bucket, boto_session, settings_requirements
@@ -94,8 +96,6 @@ def cleanup_lambdas(boto_session):
         delete_lambda(boto_session, i)
 
 
-# Could not open requirements file: [Errno 2] No such file or directory:
-# 'requirements.txt'
 @pytest.mark.aws
 @check_preconditions
 def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
@@ -194,6 +194,111 @@ def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
 
 @pytest.mark.aws
 @check_preconditions
+def test_create_lambda_nodejs(boto_session, temp_folder, cleanup_lambdas,
+                              cleanup_roles):
+    log.info('running test_create_lambda_nodejs')
+    # copy package.json and settings_dev.conf from sample
+    shutil.copy(
+        here('./resources/sample_lambda_nodejs/index.js'), temp_folder[0])
+    shutil.copy(
+        here('./resources/sample_lambda_nodejs/package.json'), temp_folder[0])
+    shutil.copy(
+        here('./resources/sample_lambda_nodejs/settings_dev.conf'), temp_folder[0])
+    temp_string = helpers.random_string()
+    lambda_name = 'jenkins_test_' + temp_string
+    log.info(lambda_name)
+    role = create_role_helper(
+        boto_session,
+        'unittest_%s_lambda' % temp_string,
+        policies=[
+            'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole',
+            'arn:aws:iam::aws:policy/AWSLambdaExecute']
+    )
+    cleanup_roles.append(role['RoleName'])
+
+    config_string = textwrap.dedent("""\
+        lambda {
+            runtime = "nodejs4.3"
+            name = "infra-dev-sample-lambda-jobr1"
+            description = "lambda test for ramuda"
+            role = 'unused'
+            handlerFunction = "index.handler"
+            handlerFile = "index.js"
+            timeout = 300
+            memorySize = 256
+
+            events {
+                s3Sources = [{
+                    bucket = "jobr-test",
+                    type = "s3:ObjectCreated:*" , suffix=".gz"
+                }]
+                timeSchedules = [{
+                    ruleName = "infra-dev-sample-lambda-jobr-T1",
+                    ruleDescription = "run every 5 min from 0-5",
+                    scheduleExpression = "cron(0/5 0-5 ? * * *)"
+                },
+                {
+                    ruleName = "infra-dev-sample-lambda-jobr-T2",
+                    ruleDescription = "run every 5 min from 8-23:59",
+                    scheduleExpression = "cron(0/5 8-23:59 ? * * *)"
+                }]
+            }
+
+            vpc {
+                subnetIds = [
+                    "subnet-d5ffb0b1", "subnet-d5ffb0b1", "subnet-d5ffb0b1",
+                    "subnet-e9db9f9f"]
+                securityGroups = ["sg-660dd700"]
+            }
+        }
+
+        bundling {
+            zip = "bundle.zip"
+            folders = [
+                { source = "./node_modules", target = "node_modules" }
+            ]
+        }
+
+        deployment {
+            region = "eu-west-1"
+        }
+        """
+                                    )
+    conf = ConfigFactory.parse_string(config_string)
+    runtime = conf.get('lambda.runtime')
+    lambda_description = conf.get('lambda.description')
+    # print (role)
+    role_arn = role['Arn']
+    lambda_handler = conf.get('lambda.handlerFunction')
+    handler_filename = conf.get('lambda.handlerFile')
+    timeout = int(conf.get_string('lambda.timeout'))
+    memory_size = int(conf.get_string('lambda.memorySize'))
+    zip_name = conf.get('bundling.zip')
+    folders_from_file = conf.get('bundling.folders')
+    subnet_ids = conf.get('lambda.vpc.subnetIds', None)
+    security_groups = conf.get('lambda.vpc.securityGroups', None)
+    region = conf.get('deployment.region')
+    artifact_bucket = conf.get('deployment.artifactBucket', None)
+
+    deploy_lambda(
+        boto_session=boto_session,
+        function_name=lambda_name,
+        role=role_arn,
+        handler_filename=handler_filename,
+        handler_function=lambda_handler,
+        folders=folders_from_file,
+        description=lambda_description,
+        timeout=timeout,
+        memory=memory_size,
+        artifact_bucket=artifact_bucket,
+        runtime=runtime
+    )
+    # TODO improve this (by using a waiter??)
+    cleanup_lambdas.append(lambda_name)
+
+
+@pytest.mark.aws
+@check_preconditions
 def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
                                cleanup_roles):
     log.info('running test_create_lambda_with_s3')
@@ -213,7 +318,7 @@ def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
     config_string = textwrap.dedent("""\
         lambda {
             name = "dp-dev-sample-lambda-jobr1"
-            description = "lambda test for ramuda"
+            description = "lambda nodejs test for ramuda"
             handlerFunction = "handler.handle"
             handlerFile = "./resources/sample_lambda/handler.py"
             timeout = 300
