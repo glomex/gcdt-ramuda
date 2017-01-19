@@ -12,7 +12,7 @@ import boto3
 from docopt import docopt
 from clint.textui import colored
 
-from glomex_utils.config_reader import read_lambda_config, read_config_if_exists
+from .config_reader import read_lambda_config, read_config_if_exists
 from gcdt import utils
 from gcdt.logger import setup_logger
 from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
