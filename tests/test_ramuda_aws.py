@@ -20,7 +20,7 @@ from gcdt.ramuda_utils import list_lambda_versions, make_zip_file_bytes, \
     create_sha256, get_remote_code_hash
 from .helpers import cleanup_tempfiles, temp_folder
 from . import helpers
-from .helpers import temp_folder
+from .helpers import temp_folder, check_npm
 from .helpers_aws import create_role_helper, delete_role_helper, \
     create_lambda_helper, create_lambda_role_helper, check_preconditions, \
     temp_bucket, boto_session, settings_requirements
@@ -194,6 +194,7 @@ def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
 
 @pytest.mark.aws
 @check_preconditions
+@check_npm
 def test_create_lambda_nodejs(boto_session, temp_folder, cleanup_lambdas,
                               cleanup_roles):
     log.info('running test_create_lambda_nodejs')
