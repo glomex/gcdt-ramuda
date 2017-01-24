@@ -100,7 +100,7 @@ def test_install_dependencies_with_pip(temp_folder, cleanup_tempfiles):
 
 
 @pytest.mark.slow
-def test_install_dependencies_with_npm(temp_folder, cleanup_tempfiles):
+def test_install_dependencies_with_npm(temp_folder):
     with open('./package.json', 'w') as req:
         req.write(textwrap.dedent("""\
             {
