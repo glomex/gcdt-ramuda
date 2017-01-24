@@ -19,7 +19,7 @@ from gcdt.ramuda_core import list_functions, get_metrics, deploy_lambda, \
     wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info, \
     cleanup_bundle
 from gcdt.utils import read_gcdt_user_config, get_context, get_command, \
-    read_gcdt_user_config_value
+    read_gcdt_user_config_value, check_gcdt_update
 from gcdt.monitoring import datadog_notification, datadog_error, \
     datadog_event_detail
 
@@ -73,6 +73,7 @@ def get_user_config():
 def main():
     exit_code = 0
     arguments = docopt(DOC)
+    check_gcdt_update()
     if arguments['version']:
         utils.version()
         sys.exit(0)
