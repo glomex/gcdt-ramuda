@@ -16,13 +16,14 @@ import pytest
 from testfixtures import LogCapture
 
 from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda, \
-    cleanup_bundle
+    cleanup_bundle, _install_dependencies_with_npm
 from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     aggregate_datapoints, json2table, create_sha256, ProgressPercentage, \
     list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, \
     get_bucket_from_s3_arn, build_filter_rules
 from gcdt.logger import setup_logger
-from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles, here
+from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles, \
+    here, check_npm
 
 log = setup_logger(logger_name='ramuda_test')
 
@@ -97,6 +98,28 @@ def test_install_dependencies_with_pip(temp_folder, cleanup_tempfiles):
     for package in packages:
         log.debug(package)
     assert_true('werkzeug' in packages)
+
+
+@pytest.mark.slow
+@check_npm
+def test_install_dependencies_with_npm(temp_folder):
+    with open('./package.json', 'w') as req:
+        req.write(textwrap.dedent("""\
+            {
+              "name": "my-sample-lambda",
+              "version": "0.0.1",
+              "description": "A very simple lambda function",
+              "main": "index.js",
+              "dependencies": {
+                "1337": "^1.0.0"
+              }
+            }"""))
+
+    log.info(_install_dependencies_with_npm())
+    packages = os.listdir(os.path.join(temp_folder[0], 'node_modules'))
+    for package in packages:
+        log.debug(package)
+    assert_true('1337' in packages)
 
 
 def test_bundle_lambda(temp_folder):
