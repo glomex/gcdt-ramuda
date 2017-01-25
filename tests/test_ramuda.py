@@ -11,9 +11,8 @@ import time
 
 from s3transfer.subscribers import BaseSubscriber
 from nose.tools import assert_true, assert_false, assert_not_in, assert_in, \
-    assert_equal, assert_regexp_matches, assert_less
+    assert_equal, assert_regexp_matches
 import pytest
-from testfixtures import LogCapture
 
 from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda, \
     cleanup_bundle, _install_dependencies_with_npm
@@ -120,69 +119,6 @@ def test_install_dependencies_with_npm(temp_folder):
     for package in packages:
         log.debug(package)
     assert_true('1337' in packages)
-
-
-def test_bundle_lambda(temp_folder):
-    folders_from_file = [
-        {'source': './vendored', 'target': '.'},
-        {'source': './impl', 'target': 'impl'}
-    ]
-    prebundle_scripts = [here('resources/sample_lambda_with_prebundle/sample_script.sh')]
-    os.environ['ENV'] = 'DEV'
-    os.mkdir('./vendored')
-    os.mkdir('./impl')
-    with open('./requirements.txt', 'w') as req:
-        req.write('pyhocon\n')
-    with open('./handler.py', 'w') as req:
-        req.write('# this is my lambda handler\n')
-    with open('./settings_dev.conf', 'w') as req:
-        req.write('\n')
-    # write 1MB file -> this gets us a zip file that is within the 50MB limit
-    with open('./impl/bigfile', 'wb') as bigfile:
-        print(bigfile.name)
-        bigfile.write(os.urandom(1000000))  # 1 MB
-    exit_code = bundle_lambda('./handler.py', folders_from_file, prebundle_scripts)
-    assert_equal(exit_code, 0)
-
-    assert_true(os.path.isfile('test_ramuda_prebundle.txt'))
-
-    zipped_size = os.path.getsize('bundle.zip')
-    unzipped_size = get_size('vendored') + get_size('impl') + os.path.getsize('handler.py')
-    assert_less(zipped_size, unzipped_size)
-
-
-@pytest.mark.slow
-def test_bundle_lambda_exceeds_limit(temp_folder):
-    folders_from_file = [
-        {'source': './vendored', 'target': '.'},
-        {'source': './impl', 'target': 'impl'}
-    ]
-    os.environ['ENV'] = 'DEV'
-
-    os.mkdir('./vendored')
-    os.mkdir('./impl')
-    with open('./requirements.txt', 'w') as req:
-        req.write('pyhocon\n')
-    with open('./handler.py', 'w') as req:
-        req.write('# this is my lambda handler\n')
-    with open('./settings_dev.conf', 'w') as req:
-        req.write('\n')
-    # write 51MB file -> this gets us a zip file that exceeds the 50MB limit
-    with open('./impl/bigfile', 'wb') as bigfile:
-        print(bigfile.name)
-        bigfile.write(os.urandom(51100000))  # 51 MB
-
-    # capture ERROR logging:
-    with LogCapture(level=logging.ERROR) as l:
-        exit_code = bundle_lambda('./handler.py', folders_from_file)
-        l.check(
-            ('ramuda_utils', 'ERROR',
-             'Deployment bundles must not be bigger than 50MB'),
-            ('ramuda_utils', 'ERROR',
-             'See http://docs.aws.amazon.com/lambda/latest/dg/limits.html')
-        )
-
-    assert_equal(exit_code, 1)
 
 
 def test_cleanup_bundle(temp_folder):

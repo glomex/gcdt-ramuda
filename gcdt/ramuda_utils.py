@@ -34,7 +34,7 @@ def files_to_zip(path):
             yield full_path, archive_name
 
 
-def make_zip_file_bytes(paths, handler, settings='settings'):
+def make_zip_file_bytes(boto_session, paths, handler, settings='settings'):
     """Create the bundle zip file.
 
     :param paths:
@@ -86,7 +86,8 @@ def make_zip_file_bytes(paths, handler, settings='settings'):
             # give settings.conf -rw-r--r-- permissions
             settings_file = ZipInfo('settings.conf')
             settings_file.external_attr = 0644 << 16L
-            z.writestr(settings_file, read_config(config_base_name='settings',
+            z.writestr(settings_file, read_config(boto_session,
+                                                  config_base_name='settings',
                                                   lookups=['stack'],
                                                   output_format='hocon'))
             z.write(handler, os.path.basename(handler))

@@ -320,7 +320,7 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
                                           prebundle_scripts=prebundle_scripts,
                                           runtime=runtime)
     else:
-        zipfile = _get_zipped_file(handler_filename, folders,
+        zipfile = _get_zipped_file(boto_session, handler_filename, folders,
                                    prebundle_scripts=prebundle_scripts,
                                    runtime=runtime)
         if not zipfile:
@@ -349,8 +349,8 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
     return 0
 
 
-def _get_zipped_file(handler_filename, folders, prebundle_scripts=None,
-                     runtime='python2.7'):
+def _get_zipped_file(boto_session, handler_filename, folders,
+                     prebundle_scripts=None, runtime='python2.7'):
     if prebundle_scripts:
         prebundle_failed = utils.execute_scripts(prebundle_scripts)
         if prebundle_failed:
@@ -367,7 +367,8 @@ def _get_zipped_file(handler_filename, folders, prebundle_scripts=None,
         if install_failed:
             return
 
-    zipfile = make_zip_file_bytes(handler=handler_filename, paths=folders)
+    zipfile = make_zip_file_bytes(boto_session, handler=handler_filename,
+                                  paths=folders)
     size_limit_exceeded = check_buffer_exceeds_limit(zipfile)
     if size_limit_exceeded:
         return
@@ -469,7 +470,7 @@ def _update_lambda(boto_session, function_name, handler_filename,
     return function_version
 
 
-def bundle_lambda(handler_filename, folders, prebundle_scripts=None,
+def bundle_lambda(boto_session, handler_filename, folders, prebundle_scripts=None,
                   runtime='python2.7'):
     """Prepare a zip file for the lambda function and dependencies.
 
@@ -478,7 +479,7 @@ def bundle_lambda(handler_filename, folders, prebundle_scripts=None,
     :return: exit_code
     """
 
-    zipfile = _get_zipped_file(handler_filename, folders,
+    zipfile = _get_zipped_file(boto_session, handler_filename, folders,
                                prebundle_scripts=prebundle_scripts,
                                runtime=runtime)
     if not zipfile:
@@ -493,7 +494,7 @@ def _update_lambda_function_code(
         boto_session, function_name, handler_filename, folders,
         artifact_bucket=None, prebundle_scripts=None, runtime='python2.7'):
     client_lambda = boto_session.client('lambda')
-    zipfile = _get_zipped_file(handler_filename, folders,
+    zipfile = _get_zipped_file(boto_session, handler_filename, folders,
                                prebundle_scripts=prebundle_scripts,
                                runtime=runtime)
     if not zipfile:

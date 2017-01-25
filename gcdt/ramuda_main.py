@@ -79,7 +79,7 @@ def main():
         sys.exit(0)
 
     boto_session = boto3.session.Session()
-    context = get_context('ramuda', get_command(arguments))
+    context = get_context(boto_session, 'ramuda', get_command(arguments))
     datadog_notification(context)
     if arguments['clean']:
         cleanup_bundle()
@@ -96,7 +96,7 @@ def main():
         slack_token, slack_channel = get_user_config()
         fail_deployment_on_unsuccessful_ping = read_gcdt_user_config_value(
             'ramuda.failDeploymentOnUnsuccessfulPing', False)
-        conf = read_lambda_config()
+        conf = read_lambda_config(boto_session)
         lambda_name = conf.get('lambda.name')
         lambda_description = conf.get('lambda.description')
         role_arn = conf.get('lambda.role')
@@ -129,7 +129,7 @@ def main():
     elif arguments['delete']:
         are_credentials_still_valid(boto_session)
         slack_token, slack_channel = get_user_config()
-        conf = read_config_if_exists('lambda')
+        conf = read_config_if_exists(boto_session, 'lambda')
         function_name = conf.get('lambda.name', None)
         if function_name == str(arguments['<lambda>']):
             s3_event_sources = conf.get('lambda.events.s3Sources', [])
@@ -147,7 +147,7 @@ def main():
         datadog_event_detail(context, event)
     elif arguments['info']:
         are_credentials_still_valid(boto_session)
-        conf = read_lambda_config()
+        conf = read_lambda_config(boto_session)
         function_name = conf.get('lambda.name')
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
         time_event_sources = conf.get('lambda.events.timeSchedules', [])
@@ -156,7 +156,7 @@ def main():
     elif arguments['wire']:
         are_credentials_still_valid(boto_session)
         slack_token, slack_channel = get_user_config()
-        conf = read_lambda_config()
+        conf = read_lambda_config(boto_session)
         function_name = conf.get('lambda.name')
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
         time_event_sources = conf.get('lambda.events.timeSchedules', [])
@@ -169,7 +169,7 @@ def main():
     elif arguments['unwire']:
         are_credentials_still_valid(boto_session)
         slack_token, slack_channel = get_user_config()
-        conf = read_lambda_config()
+        conf = read_lambda_config(boto_session)
         function_name = conf.get('lambda.name')
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
         time_event_sources = conf.get('lambda.events.timeSchedules', [])
@@ -180,13 +180,13 @@ def main():
                  'with alias %s' % 'ACTIVE')
         datadog_event_detail(context, event)
     elif arguments['bundle']:
-        conf = read_lambda_config()
+        conf = read_lambda_config(boto_session)
         runtime = conf.get('lambda.runtime', 'python2.7')
         handler_filename = conf.get('lambda.handlerFile')
         folders_from_file = conf.get('bundling.folders')
         prebundle_scripts = conf.get('bundling.preBundle', None)
-        exit_code = bundle_lambda(handler_filename, folders_from_file,
-                                  prebundle_scripts, runtime)
+        exit_code = bundle_lambda(boto_session, handler_filename,
+                                  folders_from_file, prebundle_scripts, runtime)
     elif arguments['rollback']:
         are_credentials_still_valid(boto_session)
         slack_token, slack_channel = get_user_config()
