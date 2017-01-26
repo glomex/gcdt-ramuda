@@ -213,6 +213,11 @@ def create_sha256(code):
     return checksum
 
 
+def create_sha256_urlsafe(code):
+    checksum = base64.urlsafe_b64encode(hashlib.sha256(code).digest())
+    return checksum
+
+
 def create_aws_s3_arn(bucket_name):
     return 'arn:aws:s3:::' + bucket_name
 
@@ -278,6 +283,10 @@ def get_packages_to_ignore(folder, ramuda_ignore_file):
         for match in spec.match_tree(folder):
             matches.append(match)
         return matches
+    except IOError:
+        print(colored.yellow('Warning: ') + 'No such file: %s' %
+              ramuda_ignore_file)
+        return []
     except Exception as e:
         print(e)
         return []
@@ -286,7 +295,7 @@ def get_packages_to_ignore(folder, ramuda_ignore_file):
 def cleanup_folder(path, ramuda_ignore_file=None):
     # this cleans up the ./vendored (path) folder
     # exclude locally installed gcdt_develop from lambda container
-    print('path: %s' % path)
+    # print('path: %s' % path)
     matches = get_packages_to_ignore(path, ramuda_ignore_file)
     result_set = set()
     for package in matches:
@@ -345,19 +354,22 @@ def s3_upload(boto_session, deploy_bucket, zipfile, lambda_name):
     client_s3 = boto_session.client('s3')
     transfer = S3Transfer(client_s3)
     bucket = deploy_bucket
-    git_hash = utils.get_git_revision_short_hash()
 
-    # ramuda/eu-west-1/function_name/git_hash.zip
-    dest_key = 'ramuda/%s/%s/%s.zip' % (region, lambda_name, git_hash)
+    if not zipfile:
+        return
+    local_hash = create_sha256_urlsafe(zipfile)
 
-    with open('/tmp/' + git_hash, 'wb') as source_file:
+    # ramuda/eu-west-1/<lambda_name>/<local_hash>.zip
+    dest_key = 'ramuda/%s/%s/%s.zip' % (region, lambda_name, local_hash)
+
+    source_filename = '/tmp/' + local_hash
+    with open(source_filename, 'wb') as source_file:
         source_file.write(zipfile)
 
-    source_file = '/tmp/' + git_hash
     # print 'uploading to S3'
     # start = time.time()
-    transfer.upload_file(source_file, bucket, dest_key,
-                         callback=ProgressPercentage(source_file))
+    transfer.upload_file(source_filename, bucket, dest_key,
+                         callback=ProgressPercentage(source_filename))
     # end = time.time()
     # print 'uploading took:'
     # print(end - start)
@@ -366,5 +378,6 @@ def s3_upload(boto_session, deploy_bucket, zipfile, lambda_name):
     # print '\n'
     # print response['ETag']
     # print response['VersionId']
-    print(dest_key)
+    # print(dest_key)
+    print()
     return dest_key, response['ETag'], response['VersionId']
