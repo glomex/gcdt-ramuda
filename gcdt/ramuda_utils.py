@@ -288,7 +288,7 @@ def get_packages_to_ignore(folder, ramuda_ignore_file):
               ramuda_ignore_file)
         return []
     except Exception as e:
-        print(repr(e))
+        print(e)
         return []
 
 
