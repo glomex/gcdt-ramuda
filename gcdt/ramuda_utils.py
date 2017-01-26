@@ -18,9 +18,9 @@ from clint.textui import colored
 from tabulate import tabulate
 from pyhocon import config_tree
 
-from .config_reader import read_config
-from gcdt.logger import setup_logger
-from gcdt import utils
+from .config_reader import read_config, get_config_name
+from .logger import setup_logger
+from . import utils
 
 log = setup_logger(logger_name='ramuda_utils')
 
@@ -83,13 +83,16 @@ def make_zip_file_bytes(boto_session, paths, handler, settings='settings'):
                     # print 'archive target ' + archive_target
                     z.write(full_path, archive_target)
 
-            # give settings.conf -rw-r--r-- permissions
-            settings_file = ZipInfo('settings.conf')
-            settings_file.external_attr = 0644 << 16L
-            z.writestr(settings_file, read_config(boto_session,
-                                                  config_base_name='settings',
-                                                  lookups=['stack'],
-                                                  output_format='hocon'))
+            # add settings_<env>.conf file
+            if os.path.isfile(get_config_name('settings')):
+                # give settings.conf -rw-r--r-- permissions
+                settings_file = ZipInfo('settings.conf')
+                settings_file.external_attr = 0644 << 16L
+                z.writestr(settings_file,
+                           read_config(boto_session,
+                                       config_base_name='settings',
+                                       lookups=['stack'],
+                                       output_format='hocon'))
             z.write(handler, os.path.basename(handler))
     # print z.printdir()
 
@@ -227,7 +230,8 @@ def get_rule_name_from_event_arn(aws_event_arn):
 
 def get_remote_code_hash(boto_session, function_name):
     client_lambda = boto_session.client('lambda')
-    response = client_lambda.get_function_configuration(FunctionName=function_name)
+    response = client_lambda.get_function_configuration(
+        FunctionName=function_name)
     return response['CodeSha256']
 
 
