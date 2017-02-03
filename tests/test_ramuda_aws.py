@@ -22,7 +22,7 @@ from gcdt.ramuda_core import delete_lambda, deploy_lambda, ping, \
 from gcdt.ramuda_utils import list_lambda_versions, make_zip_file_bytes, \
     create_sha256, get_remote_code_hash
 from .helpers import cleanup_tempfiles, temp_folder
-from . import helpers
+from . import helpers, here
 from .helpers import temp_folder, check_npm
 from .helpers_aws import create_role_helper, delete_role_helper, \
     create_lambda_helper, create_lambda_role_helper, check_preconditions, \
@@ -34,7 +34,44 @@ log = setup_logger(logger_name='ramuda_test_aws')
 # TODO: move AWS resource helpers to helpers_aws.py
 
 
-def here(p): return os.path.join(os.path.dirname(__file__), p)
+# TODO remove after refactoring
+@pytest.fixture(scope='function')  # 'function' or 'module'
+def temp_bucket(boto_session):
+    # create a bucket
+    temp_string = helpers.random_string()
+    bucket_name = 'unittest-lambda-s3-event-source-%s' % temp_string
+    create_bucket(boto_session, bucket_name)
+    yield bucket_name
+    # cleanup
+    delete_bucket(boto_session, bucket_name)
+
+
+# bucket helpers (parts borrowed from tenkai)
+def create_bucket(session, bucket):
+    client = session.client('s3')
+    client.create_bucket(
+        Bucket=bucket,
+        CreateBucketConfiguration={
+            'LocationConstraint': 'eu-west-1'
+        }
+    )
+
+
+def delete_bucket(session, bucket):
+    log.debug('deleting bucket %s' % bucket)
+    if bucket.startswith('unittest-'):
+        s3 = session.resource('s3')
+        # delete all objects first
+        bu = s3.Bucket(bucket)
+        log.debug('deleting keys')
+        for key in bu.objects.all():
+            log.debug('deleting key: %s' % key)
+            key.delete()
+        log.debug('deleting bucket')
+        # now we can delete the bucket
+        bu.delete()
+
+# end TODO
 
 
 def get_size(start_path='.'):

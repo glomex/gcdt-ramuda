@@ -22,7 +22,8 @@ from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     get_bucket_from_s3_arn, build_filter_rules
 from gcdt.logger import setup_logger
 from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles, \
-    here, check_npm
+    check_npm
+from . import here
 
 log = setup_logger(logger_name='ramuda_test')
 
