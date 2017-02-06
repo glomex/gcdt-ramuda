@@ -26,24 +26,24 @@ from . import helpers, here
 from .helpers import temp_folder, check_npm
 from .helpers_aws import create_role_helper, delete_role_helper, \
     create_lambda_helper, create_lambda_role_helper, check_preconditions, \
-    temp_bucket, boto_session, settings_requirements
-
+    settings_requirements
+from .helpers_aws import temp_bucket, awsclient  # fixtures!
 
 log = setup_logger(logger_name='ramuda_test_aws')
 # TODO: speedup tests by reusing lambda functions where possible
 # TODO: move AWS resource helpers to helpers_aws.py
 
-
+'''
 # TODO remove after refactoring
 @pytest.fixture(scope='function')  # 'function' or 'module'
-def temp_bucket(boto_session):
+def temp_bucket(awsclient):
     # create a bucket
     temp_string = helpers.random_string()
     bucket_name = 'unittest-lambda-s3-event-source-%s' % temp_string
-    create_bucket(boto_session, bucket_name)
+    create_bucket(awsclient, bucket_name)
     yield bucket_name
     # cleanup
-    delete_bucket(boto_session, bucket_name)
+    delete_bucket(awsclient, bucket_name)
 
 
 # bucket helpers (parts borrowed from tenkai)
@@ -72,6 +72,7 @@ def delete_bucket(session, bucket):
         bu.delete()
 
 # end TODO
+'''
 
 
 def get_size(start_path='.'):
@@ -102,50 +103,50 @@ def vendored_folder():
 
 
 @pytest.fixture(scope='function')  # 'function' or 'module'
-def temp_lambda(boto_session):
+def temp_lambda(awsclient):
     # provide a lambda function and cleanup after test suite
     temp_string = helpers.random_string()
     lambda_name = 'jenkins_test_%s' % temp_string
     role_name = 'unittest_%s_lambda' % temp_string
     # create the function
-    role_arn = create_lambda_role_helper(boto_session, role_name)
-    create_lambda_helper(boto_session, lambda_name, role_arn,
+    role_arn = create_lambda_role_helper(awsclient, role_name)
+    create_lambda_helper(awsclient, lambda_name, role_arn,
                          './resources/sample_lambda/handler.py',
                          lambda_handler='handler.handle')
     yield lambda_name, role_name, role_arn
     # cleanup
-    delete_lambda(boto_session, lambda_name)
-    delete_role_helper(boto_session, role_name)
+    delete_lambda(awsclient, lambda_name)
+    delete_role_helper(awsclient, role_name)
 
 
 @pytest.fixture(scope='function')  # 'function' or 'module'
-def cleanup_roles(boto_session):
+def cleanup_roles(awsclient):
     items = []
     yield items
     # cleanup
     for i in items:
-        delete_role_helper(boto_session, i)
+        delete_role_helper(awsclient, i)
 
 
 @pytest.fixture(scope='function')  # 'function' or 'module'
-def cleanup_lambdas(boto_session):
+def cleanup_lambdas(awsclient):
     items = []
     yield items
     # cleanup
     for i in items:
-        delete_lambda(boto_session, i)
+        delete_lambda(awsclient, i)
 
 
 @pytest.mark.aws
 @check_preconditions
-def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
+def test_create_lambda(awsclient, vendored_folder, cleanup_lambdas,
                        cleanup_roles):
     log.info('running test_create_lambda')
     temp_string = helpers.random_string()
     lambda_name = 'jenkins_test_' + temp_string
     log.info(lambda_name)
     role = create_role_helper(
-        boto_session,
+        awsclient,
         'unittest_%s_lambda' % temp_string,
         policies=[
             'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole',
@@ -217,7 +218,7 @@ def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
     artifact_bucket = conf.get('deployment.artifactBucket', None)
 
     deploy_lambda(
-        boto_session=boto_session,
+        awsclient=awsclient,
         function_name=lambda_name,
         role=role_arn,
         handler_filename=handler_filename,
@@ -235,7 +236,7 @@ def test_create_lambda(boto_session, vendored_folder, cleanup_lambdas,
 @pytest.mark.aws
 @check_preconditions
 @check_npm
-def test_create_lambda_nodejs(boto_session, temp_folder, cleanup_lambdas,
+def test_create_lambda_nodejs(awsclient, temp_folder, cleanup_lambdas,
                               cleanup_roles):
     log.info('running test_create_lambda_nodejs')
     # copy package.json and settings_dev.conf from sample
@@ -249,7 +250,7 @@ def test_create_lambda_nodejs(boto_session, temp_folder, cleanup_lambdas,
     lambda_name = 'jenkins_test_' + temp_string
     log.info(lambda_name)
     role = create_role_helper(
-        boto_session,
+        awsclient,
         'unittest_%s_lambda' % temp_string,
         policies=[
             'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole',
@@ -322,7 +323,7 @@ def test_create_lambda_nodejs(boto_session, temp_folder, cleanup_lambdas,
     artifact_bucket = conf.get('deployment.artifactBucket', None)
 
     deploy_lambda(
-        boto_session=boto_session,
+        awsclient=awsclient,
         function_name=lambda_name,
         role=role_arn,
         handler_filename=handler_filename,
@@ -340,7 +341,7 @@ def test_create_lambda_nodejs(boto_session, temp_folder, cleanup_lambdas,
 
 @pytest.mark.aws
 @check_preconditions
-def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
+def test_create_lambda_with_s3(awsclient, vendored_folder, cleanup_lambdas,
                                cleanup_roles):
     log.info('running test_create_lambda_with_s3')
     account = os.getenv('ACCOUNT')
@@ -348,7 +349,7 @@ def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
     lambda_name = 'jenkins_test_' + temp_string
     log.info(lambda_name)
     role = create_role_helper(
-        boto_session,
+        awsclient,
         'unittest_%s_lambda' % temp_string,
         policies=[
             'arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole',
@@ -419,7 +420,7 @@ def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
     artifact_bucket = conf.get('deployment.artifactBucket', None)
 
     deploy_lambda(
-        boto_session=boto_session,
+        awsclient=awsclient,
         function_name=lambda_name,
         role=role_arn,
         handler_filename=handler_filename,
@@ -435,33 +436,33 @@ def test_create_lambda_with_s3(boto_session, vendored_folder, cleanup_lambdas,
 
 @pytest.mark.aws
 @check_preconditions
-def test_update_lambda(boto_session, vendored_folder, cleanup_lambdas,
+def test_update_lambda(awsclient, vendored_folder, cleanup_lambdas,
                        cleanup_roles):
     log.info('running test_update_lambda')
     temp_string = helpers.random_string()
     lambda_name = 'jenkins_test_%s' % temp_string
     role_name = 'unittest_%s_lambda' % temp_string
     # create the function
-    role_arn = create_lambda_role_helper(boto_session, role_name)
+    role_arn = create_lambda_role_helper(awsclient, role_name)
     cleanup_roles.append(role_name)
-    create_lambda_helper(boto_session, lambda_name, role_arn,
+    create_lambda_helper(awsclient, lambda_name, role_arn,
                          './resources/sample_lambda/handler.py')
     # update the function
-    create_lambda_helper(boto_session, lambda_name, role_arn,
+    create_lambda_helper(awsclient, lambda_name, role_arn,
                          './resources/sample_lambda/handler_v2.py')
     cleanup_lambdas.append(lambda_name)
 
 
-def _get_count(boto_session, function_name, alias_name='ACTIVE', version=None):
+def _get_count(awsclient, function_name, alias_name='ACTIVE', version=None):
     """Send a count request to a lambda function.
 
-    :param boto_session:
+    :param awsclient:
     :param function_name:
     :param alias_name:
     :param version:
     :return: count retrieved from lambda call
     """
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     payload = '{"ramuda_action": "count"}'
 
     if version:
@@ -523,7 +524,7 @@ def _get_count(boto_session, function_name, alias_name='ACTIVE', version=None):
 
 @pytest.mark.aws
 @check_preconditions
-def test_schedule_event_source(boto_session, vendored_folder, cleanup_lambdas,
+def test_schedule_event_source(awsclient, vendored_folder, cleanup_lambdas,
                                cleanup_roles):
     log.info('running test_schedule_event_source')
     # include reading config from settings file
@@ -553,37 +554,37 @@ def test_schedule_event_source(boto_session, vendored_folder, cleanup_lambdas,
     temp_string = helpers.random_string()
     lambda_name = 'jenkins_test_%s' % temp_string
     role_name = 'unittest_%s_lambda' % temp_string
-    role_arn = create_lambda_role_helper(boto_session, role_name)
+    role_arn = create_lambda_role_helper(awsclient, role_name)
     cleanup_roles.append(role_name)
-    create_lambda_helper(boto_session, lambda_name, role_arn,
+    create_lambda_helper(awsclient, lambda_name, role_arn,
                          './resources/sample_lambda/handler_counter.py',
                          lambda_handler='handler_counter.handle')
     cleanup_lambdas.append(lambda_name)
 
     # lookup lambda arn
-    lambda_client = boto_session.client('lambda')
+    lambda_client = awsclient.get_client('lambda')
     # lambda_function = lambda_client.get_function(FunctionName=function_name)
     alias_name = 'ACTIVE'
     lambda_arn = lambda_client.get_alias(FunctionName=lambda_name,
                                          Name=alias_name)['AliasArn']
     # create scheduled event source
     rule_arn = _lambda_add_time_schedule_event_source(
-        boto_session, rule_name, rule_description, schedule_expression,
+        awsclient, rule_name, rule_description, schedule_expression,
         lambda_arn
     )
     _lambda_add_invoke_permission(
-        boto_session, lambda_name, 'events.amazonaws.com', rule_arn)
+        awsclient, lambda_name, 'events.amazonaws.com', rule_arn)
 
     time.sleep(180)  # wait for at least 2 invocations
 
-    count = _get_count(boto_session, lambda_name)
+    count = _get_count(awsclient, lambda_name)
     assert_greater_equal(int(count), 2)
 
 
 @pytest.mark.aws
 @pytest.mark.slow
 @check_preconditions
-def test_wire_unwire_lambda_with_s3(boto_session, vendored_folder,
+def test_wire_unwire_lambda_with_s3(awsclient, vendored_folder,
                                     cleanup_lambdas, cleanup_roles,
                                     temp_bucket):
     log.info('running test_wire_unwire_lambda_with_s3')
@@ -592,9 +593,9 @@ def test_wire_unwire_lambda_with_s3(boto_session, vendored_folder,
     temp_string = helpers.random_string()
     lambda_name = 'jenkins_test_%s' % temp_string
     role_name = 'unittest_%s_lambda' % temp_string
-    role_arn = create_lambda_role_helper(boto_session, role_name)
+    role_arn = create_lambda_role_helper(awsclient, role_name)
     cleanup_roles.append(role_name)
-    create_lambda_helper(boto_session, lambda_name, role_arn,
+    create_lambda_helper(awsclient, lambda_name, role_arn,
                          './resources/sample_lambda/handler_counter.py',
                          lambda_handler='handler_counter.handle')
     cleanup_lambdas.append(lambda_name)
@@ -619,12 +620,12 @@ def test_wire_unwire_lambda_with_s3(boto_session, vendored_folder,
     # wire the function with the bucket
     s3_event_sources = conf.get('lambda.events.s3Sources', [])
     time_event_sources = conf.get('lambda.events.timeSchedules', [])
-    exit_code = wire(boto_session, lambda_name, s3_event_sources,
+    exit_code = wire(awsclient, lambda_name, s3_event_sources,
                      time_event_sources)
     assert_equal(exit_code, 0)
 
     # put a file into the bucket
-    boto_session.client('s3').put_object(
+    awsclient.get_client('s3').put_object(
         ACL='public-read',
         Body=b'this is some content',
         Bucket=bucket_name,
@@ -633,15 +634,15 @@ def test_wire_unwire_lambda_with_s3(boto_session, vendored_folder,
 
     # validate function call
     time.sleep(20)  # sleep till the event arrived
-    assert_equal(int(_get_count(boto_session, lambda_name)), 1)
+    assert_equal(int(_get_count(awsclient, lambda_name)), 1)
 
     # unwire the function
-    exit_code = unwire(boto_session, lambda_name, s3_event_sources,
+    exit_code = unwire(awsclient, lambda_name, s3_event_sources,
                        time_event_sources)
     assert_equal(exit_code, 0)
 
     # put in another file
-    boto_session.client('s3').put_object(
+    awsclient.get_client('s3').put_object(
         ACL='public-read',
         Body=b'this is some content',
         Bucket=bucket_name,
@@ -650,24 +651,22 @@ def test_wire_unwire_lambda_with_s3(boto_session, vendored_folder,
 
     # validate function not called
     time.sleep(10)
-    assert_equal(int(_get_count(boto_session, lambda_name)), 1)
+    assert_equal(int(_get_count(awsclient, lambda_name)), 1)
 
 
 @pytest.mark.aws
 @check_preconditions
-def test_lambda_add_invoke_permission(boto_session, vendored_folder,
+def test_lambda_add_invoke_permission(awsclient, vendored_folder,
                                       temp_bucket, cleanup_lambdas,
                                       cleanup_roles):
     log.info('running test_lambda_add_invoke_permission')
-
-    # create a lambda function
     temp_string = helpers.random_string()
-    print(temp_string)
+    #print(temp_string)
     lambda_name = 'jenkins_test_%s' % temp_string
     role_name = 'unittest_%s_lambda' % temp_string
-    role_arn = create_lambda_role_helper(boto_session, role_name)
+    role_arn = create_lambda_role_helper(awsclient, role_name)
     cleanup_roles.append(role_name)
-    create_lambda_helper(boto_session, lambda_name, role_arn,
+    create_lambda_helper(awsclient, lambda_name, role_arn,
                          './resources/sample_lambda/handler_counter.py',
                          lambda_handler='handler_counter.handle')
     cleanup_lambdas.append(lambda_name)
@@ -675,7 +674,7 @@ def test_lambda_add_invoke_permission(boto_session, vendored_folder,
 
     s3_arn = 'arn:aws:s3:::' + bucket_name
     response = _lambda_add_invoke_permission(
-        boto_session, lambda_name, 's3.amazonaws.com', s3_arn)
+        awsclient, lambda_name, 's3.amazonaws.com', s3_arn)
 
     # {"Statement":"{\"Condition\":{\"ArnLike\":{\"AWS:SourceArn\":\"arn:aws:s3:::unittest-lambda-s3-bucket-coedce\"}},\"Action\":[\"lambda:InvokeFunction\"],\"Resource\":\"arn:aws:lambda:eu-west-1:188084614522:function:jenkins_test_coedce:ACTIVE\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"s3.amazonaws.com\"},\"Sid\":\"07c77fac-68ff-11e6-97f8-c4850848610b\"}"}
 
@@ -686,14 +685,14 @@ def test_lambda_add_invoke_permission(boto_session, vendored_folder,
 
 @pytest.mark.aws
 @check_preconditions
-def test_list_functions(boto_session, vendored_folder, temp_lambda):
+def test_list_functions(awsclient, vendored_folder, temp_lambda):
     log.info('running test_list_functions')
 
     lambda_name = temp_lambda[0]
     role_name = temp_lambda[1]
 
     out = StringIO()
-    list_functions(boto_session, out)
+    list_functions(awsclient, out)
 
     expected_regex = ".*%s\\n\\tMemory: 128\\n\\tTimeout: 300\\n\\tRole: arn:aws:iam::\d{12}:role\/%s\\n\\tCurrent Version: \$LATEST.*" \
                      % (lambda_name, role_name)
@@ -703,7 +702,7 @@ def test_list_functions(boto_session, vendored_folder, temp_lambda):
 
 @pytest.mark.aws
 @check_preconditions
-def test_update_lambda_configuration(boto_session, vendored_folder, temp_lambda):
+def test_update_lambda_configuration(awsclient, vendored_folder, temp_lambda):
     log.info('running test_update_lambda_configuration')
 
     lambda_name = temp_lambda[0]
@@ -713,7 +712,7 @@ def test_update_lambda_configuration(boto_session, vendored_folder, temp_lambda)
 
     timeout = 300
     memory_size = 256
-    function_version = _update_lambda_configuration(boto_session, lambda_name,
+    function_version = _update_lambda_configuration(awsclient, lambda_name,
                                                     role_arn, handler_function,
                                                     lambda_description, timeout,
                                                     memory_size)
@@ -722,54 +721,54 @@ def test_update_lambda_configuration(boto_session, vendored_folder, temp_lambda)
 
 @pytest.mark.aws
 @check_preconditions
-def test_get_metrics(boto_session, vendored_folder, temp_lambda):
+def test_get_metrics(awsclient, vendored_folder, temp_lambda):
     log.info('running test_get_metrics')
 
     out = StringIO()
-    get_metrics(boto_session, temp_lambda[0], out)
+    get_metrics(awsclient, temp_lambda[0], out)
     assert_regexp_matches(out.getvalue().strip(),
         'Duration 0\\n\\tErrors 0\\n\\tInvocations [0,1]{1}\\n\\tThrottles 0')
 
 
 @pytest.mark.aws
 @check_preconditions
-def test_rollback(boto_session, vendored_folder, temp_lambda):
+def test_rollback(awsclient, vendored_folder, temp_lambda):
     log.info('running test_rollback')
 
     lambda_name = temp_lambda[0]
     role_arn = temp_lambda[2]
-    alias_version = _get_alias_version(boto_session, lambda_name, 'ACTIVE')
+    alias_version = _get_alias_version(awsclient, lambda_name, 'ACTIVE')
     assert_equal(alias_version, '1')
 
     # update the function
-    create_lambda_helper(boto_session, lambda_name, role_arn,
+    create_lambda_helper(awsclient, lambda_name, role_arn,
                          './resources/sample_lambda/handler_v2.py')
 
     # now we use function_version 2!
-    alias_version = _get_alias_version(boto_session, lambda_name, 'ACTIVE')
+    alias_version = _get_alias_version(awsclient, lambda_name, 'ACTIVE')
     assert_equal(alias_version, '$LATEST')
 
-    exit_code = rollback(boto_session, lambda_name, alias_name='ACTIVE')
+    exit_code = rollback(awsclient, lambda_name, alias_name='ACTIVE')
     assert_equal(exit_code, 0)
 
     # we rolled back to function_version 1
-    alias_version = _get_alias_version(boto_session, lambda_name, 'ACTIVE')
+    alias_version = _get_alias_version(awsclient, lambda_name, 'ACTIVE')
     assert_equal(alias_version, '1')
 
     # try to rollback when previous version does not exist
-    exit_code = rollback(boto_session, lambda_name, alias_name='ACTIVE')
+    exit_code = rollback(awsclient, lambda_name, alias_name='ACTIVE')
     assert_equal(exit_code, 1)
 
     # version did not change
-    alias_version = _get_alias_version(boto_session, lambda_name, 'ACTIVE')
+    alias_version = _get_alias_version(awsclient, lambda_name, 'ACTIVE')
     assert_equal(alias_version, '1')
 
     # roll back to the latest version
-    exit_code = rollback(boto_session, lambda_name, alias_name='ACTIVE', version='$LATEST')
+    exit_code = rollback(awsclient, lambda_name, alias_name='ACTIVE', version='$LATEST')
     assert_equal(exit_code, 0)
 
     # latest version of lambda is used
-    alias_version = _get_alias_version(boto_session, lambda_name, 'ACTIVE')
+    alias_version = _get_alias_version(awsclient, lambda_name, 'ACTIVE')
     assert_equal(alias_version, '$LATEST')
 
     # TODO: create more versions >5
@@ -778,7 +777,7 @@ def test_rollback(boto_session, vendored_folder, temp_lambda):
     # TODO: verify invocations meet the right lamda_function version
 
     # here we have the test for ramuda_utils.list_lambda_versions
-    response = list_lambda_versions(boto_session, lambda_name)
+    response = list_lambda_versions(awsclient, lambda_name)
     assert_equal(response['Versions'][0]['Version'], '$LATEST')
     assert_equal(response['Versions'][1]['Version'], '1')
     assert_equal(response['Versions'][2]['Version'], '2')
@@ -790,7 +789,7 @@ def test_rollback(boto_session, vendored_folder, temp_lambda):
 '''
 @pytest.mark.aws
 @check_preconditions
-def test_get_remote_code_hash(boto_session, vendored_folder, temp_lambda):
+def test_get_remote_code_hash(awsclient, vendored_folder, temp_lambda):
     log.info('running test_get_remote_code_hash')
 
     handler_filename = './resources/sample_lambda/handler.py'
@@ -806,42 +805,42 @@ def test_get_remote_code_hash(boto_session, vendored_folder, temp_lambda):
 
     lambda_name = temp_lambda[0]
     time.sleep(10)
-    remote_hash = get_remote_code_hash(boto_session, lambda_name)
+    remote_hash = get_remote_code_hash(awsclient, lambda_name)
     assert_equal(remote_hash, expected_hash)
 '''
 
 
 @pytest.mark.aws
 @check_preconditions
-def test_ping(boto_session, vendored_folder, temp_lambda):
+def test_ping(awsclient, vendored_folder, temp_lambda):
     log.info('running test_ping')
 
     lambda_name = temp_lambda[0]
     role_arn = temp_lambda[2]
 
     # test the ping
-    response = ping(boto_session, lambda_name)
+    response = ping(awsclient, lambda_name)
     assert response == '"alive"'
 
     # update the function
-    create_lambda_helper(boto_session, lambda_name, role_arn,
+    create_lambda_helper(awsclient, lambda_name, role_arn,
                          './resources/sample_lambda/handler_no_ping.py',
                          lambda_handler='handler_no_ping.handle')
 
     # test has no ping
-    response = ping(boto_session, lambda_name)
+    response = ping(awsclient, lambda_name)
     assert response == '{"ramuda_action": "ping"}'
 
 
 @pytest.mark.aws
 @check_preconditions
-def test_prebundle(boto_session, temp_folder, cleanup_lambdas, cleanup_roles):
+def test_prebundle(awsclient, temp_folder, cleanup_lambdas, cleanup_roles):
     log.info('running test_prebundle')
 
     temp_string = helpers.random_string()
     lambda_name = 'jenkins_test_%s' % temp_string
     role_name = 'unittest_%s_lambda' % temp_string
-    role_arn = create_lambda_role_helper(boto_session, role_name)
+    role_arn = create_lambda_role_helper(awsclient, role_name)
     cleanup_roles.append(role_name)
 
     script = lambda r: here('resources/sample_lambda_with_prebundle/{}.sh'.format(r))
@@ -854,7 +853,7 @@ def test_prebundle(boto_session, temp_folder, cleanup_lambdas, cleanup_roles):
     conf = ConfigFactory.parse_string(config_string)
 
     deploy_lambda(
-        boto_session=boto_session,
+        awsclient=awsclient,
         role=role_arn,
         function_name=lambda_name,
         handler_filename=conf.get('lambda.handlerFile'),
@@ -867,13 +866,13 @@ def test_prebundle(boto_session, temp_folder, cleanup_lambdas, cleanup_roles):
     )
     cleanup_lambdas.append(lambda_name)
 
-    response = ping(boto_session, lambda_name)
+    response = ping(awsclient, lambda_name)
     assert response == '"alive"'
 
 
 @pytest.mark.aws
 @check_preconditions
-def test_bundle_lambda(temp_folder, boto_session):
+def test_bundle_lambda(temp_folder, awsclient):
     folders_from_file = [
         {'source': './vendored', 'target': '.'},
         {'source': './impl', 'target': 'impl'}
@@ -892,7 +891,7 @@ def test_bundle_lambda(temp_folder, boto_session):
     with open('./impl/bigfile', 'wb') as bigfile:
         print(bigfile.name)
         bigfile.write(os.urandom(1000000))  # 1 MB
-    exit_code = bundle_lambda(boto_session, './handler.py', folders_from_file, prebundle_scripts)
+    exit_code = bundle_lambda(awsclient, './handler.py', folders_from_file, prebundle_scripts)
     assert_equal(exit_code, 0)
 
     assert_true(os.path.isfile('test_ramuda_prebundle.txt'))
@@ -905,7 +904,7 @@ def test_bundle_lambda(temp_folder, boto_session):
 @pytest.mark.slow
 @pytest.mark.aws
 @check_preconditions
-def test_bundle_lambda_exceeds_limit(temp_folder, boto_session):
+def test_bundle_lambda_exceeds_limit(temp_folder, awsclient):
     folders_from_file = [
         {'source': './vendored', 'target': '.'},
         {'source': './impl', 'target': 'impl'}
@@ -927,7 +926,7 @@ def test_bundle_lambda_exceeds_limit(temp_folder, boto_session):
 
     # capture ERROR logging:
     with LogCapture(level=logging.ERROR) as l:
-        exit_code = bundle_lambda(boto_session, './handler.py',
+        exit_code = bundle_lambda(awsclient, './handler.py',
                                   folders_from_file)
         l.check(
             ('ramuda_utils', 'ERROR',

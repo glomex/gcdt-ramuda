@@ -13,7 +13,7 @@ import hashlib
 import base64
 
 import pathspec
-from boto3.s3.transfer import S3Transfer
+from s3transfer import S3Transfer
 from clint.textui import colored
 from tabulate import tabulate
 from pyhocon import config_tree
@@ -34,7 +34,7 @@ def files_to_zip(path):
             yield full_path, archive_name
 
 
-def make_zip_file_bytes(boto_session, paths, handler, settings='settings'):
+def make_zip_file_bytes(awsclient, paths, handler, settings='settings'):
     """Create the bundle zip file.
 
     :param paths:
@@ -89,7 +89,7 @@ def make_zip_file_bytes(boto_session, paths, handler, settings='settings'):
                 settings_file = ZipInfo('settings.conf')
                 settings_file.external_attr = 0644 << 16L
                 z.writestr(settings_file,
-                           read_config(boto_session,
+                           read_config(awsclient,
                                        config_base_name='settings',
                                        lookups=['stack'],
                                        output_format='hocon'))
@@ -116,12 +116,12 @@ def check_buffer_exceeds_limit(buf):
 
 # TODO: move this to utils
 # TODO: maybe this should return True/False
-def are_credentials_still_valid(boto_session):
+def are_credentials_still_valid(awsclient):
     """Check whether the credentials have expired.
 
     :return: exit_code
     """
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     try:
         client_lambda.list_functions()
     except Exception as e:
@@ -132,7 +132,7 @@ def are_credentials_still_valid(boto_session):
 
 
 # TODO: is this used?
-def check_aws_credentials(boto_session):
+def check_aws_credentials(awsclient):
     """
     A decorator that will check for valid credentials
     """
@@ -140,7 +140,7 @@ def check_aws_credentials(boto_session):
     def wrapper(func):
         @wraps(func)
         def wrapped(*args, **kwargs):
-            exit_code = are_credentials_still_valid(boto_session)
+            exit_code = are_credentials_still_valid(awsclient)
             if exit_code:
                 # TODO: remove exit()
                 sys.exit()
@@ -152,8 +152,8 @@ def check_aws_credentials(boto_session):
     return wrapper
 
 
-def lambda_exists(boto_session, lambda_name):
-    client_lambda = boto_session.client('lambda')
+def lambda_exists(awsclient, lambda_name):
+    client_lambda = awsclient.get_client('lambda')
     try:
         client_lambda.get_function(FunctionName=lambda_name)
     except Exception as e:
@@ -179,8 +179,8 @@ def aggregate_datapoints(datapoints):
     return int(result)
 
 
-def list_lambda_versions(boto_session, function_name):  # this is not used!!
-    client_lambda = boto_session.client('lambda')
+def list_lambda_versions(awsclient, function_name):  # this is not used!!
+    client_lambda = awsclient.get_client('lambda')
     response = client_lambda.list_versions_by_function(
         FunctionName=function_name,
     )
@@ -233,8 +233,8 @@ def get_rule_name_from_event_arn(aws_event_arn):
     return full_rule.split('/')[1]
 
 
-def get_remote_code_hash(boto_session, function_name):
-    client_lambda = boto_session.client('lambda')
+def get_remote_code_hash(awsclient, function_name):
+    client_lambda = awsclient.get_client('lambda')
     response = client_lambda.get_function_configuration(
         FunctionName=function_name)
     return response['CodeSha256']
@@ -349,9 +349,9 @@ class ProgressPercentage(object):
 
 
 @utils.retries(3)
-def s3_upload(boto_session, deploy_bucket, zipfile, lambda_name):
-    region = boto_session.region_name
-    client_s3 = boto_session.client('s3')
+def s3_upload(awsclient, deploy_bucket, zipfile, lambda_name):
+    client_s3 = awsclient.get_client('s3')
+    region = client_s3.meta.region_name
     transfer = S3Transfer(client_s3)
     bucket = deploy_bucket
 
