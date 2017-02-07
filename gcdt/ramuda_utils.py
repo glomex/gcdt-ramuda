@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
+from __future__ import unicode_literals, print_function
 import os
 import sys
 import io
@@ -164,7 +164,7 @@ def lambda_exists(awsclient, lambda_name):
 
 def unit(name):
     # used in get_metrics
-    if name is 'Duration':
+    if name == 'Duration':
         return 'Milliseconds'
     else:
         return 'Count'
@@ -209,12 +209,11 @@ def json2table(json):
 
 
 def create_sha256(code):
-    checksum = base64.b64encode(hashlib.sha256(code).digest())
-    return checksum
+    return base64.b64encode(hashlib.sha256(code.encode('utf-8')).digest())
 
 
 def create_sha256_urlsafe(code):
-    checksum = base64.urlsafe_b64encode(hashlib.sha256(code).digest())
+    checksum = base64.urlsafe_b64encode(hashlib.sha256(code.encode('utf-8')).digest())
     return checksum
 
 

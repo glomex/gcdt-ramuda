@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
+from __future__ import unicode_literals, print_function
 import os
 import shutil
 import textwrap
@@ -32,47 +32,6 @@ from .helpers_aws import temp_bucket, awsclient  # fixtures!
 log = setup_logger(logger_name='ramuda_test_aws')
 # TODO: speedup tests by reusing lambda functions where possible
 # TODO: move AWS resource helpers to helpers_aws.py
-
-'''
-# TODO remove after refactoring
-@pytest.fixture(scope='function')  # 'function' or 'module'
-def temp_bucket(awsclient):
-    # create a bucket
-    temp_string = helpers.random_string()
-    bucket_name = 'unittest-lambda-s3-event-source-%s' % temp_string
-    create_bucket(awsclient, bucket_name)
-    yield bucket_name
-    # cleanup
-    delete_bucket(awsclient, bucket_name)
-
-
-# bucket helpers (parts borrowed from tenkai)
-def create_bucket(session, bucket):
-    client = session.client('s3')
-    client.create_bucket(
-        Bucket=bucket,
-        CreateBucketConfiguration={
-            'LocationConstraint': 'eu-west-1'
-        }
-    )
-
-
-def delete_bucket(session, bucket):
-    log.debug('deleting bucket %s' % bucket)
-    if bucket.startswith('unittest-'):
-        s3 = session.resource('s3')
-        # delete all objects first
-        bu = s3.Bucket(bucket)
-        log.debug('deleting keys')
-        for key in bu.objects.all():
-            log.debug('deleting key: %s' % key)
-            key.delete()
-        log.debug('deleting bucket')
-        # now we can delete the bucket
-        bu.delete()
-
-# end TODO
-'''
 
 
 def get_size(start_path='.'):

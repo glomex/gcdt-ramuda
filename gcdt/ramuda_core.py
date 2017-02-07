@@ -4,7 +4,7 @@
 Script to deploy Lambda functions to AWS
 """
 
-from __future__ import print_function
+from __future__ import unicode_literals, print_function
 import sys
 import os, shutil
 import subprocess
