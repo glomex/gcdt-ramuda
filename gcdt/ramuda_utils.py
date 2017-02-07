@@ -209,12 +209,15 @@ def json2table(json):
 
 
 def create_sha256(code):
-    return base64.b64encode(hashlib.sha256(code.encode('utf-8')).digest())
+    if isinstance(code, unicode):
+        code = code.encode('utf-8')
+    return base64.b64encode(hashlib.sha256(code).digest())
 
 
 def create_sha256_urlsafe(code):
-    checksum = base64.urlsafe_b64encode(hashlib.sha256(code.encode('utf-8')).digest())
-    return checksum
+    if isinstance(code, unicode):
+        code = code.encode('utf-8')
+    return base64.urlsafe_b64encode(hashlib.sha256(code).digest())
 
 
 def create_aws_s3_arn(bucket_name):

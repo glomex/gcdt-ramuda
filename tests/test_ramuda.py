@@ -204,6 +204,13 @@ def test_create_sha256_urlsafe():
     assert actual == expected
 
 
+def test_create_sha256_urlsafe_2():
+    code = r'PK\x03\x04\x14\x00\x00\x00\x08\x00zg+JQ\xbbI\xd6\xba\x8e\x00\x00\x8dx\x02\x00\x0c\x00\x00\x00pyparsing.py\xec\xbd\xfb...\xa4\x81%\xdd\x01\x00handler_no_ping.pyPK\x05\x06\x00\x00\x00\x00\x1f\x00\x1f\x00\xcf\x08\x00\x00Y\xde\x01\x00\x00\x00'
+    actual = create_sha256_urlsafe(code)
+    expected = 'MH2eL07LPCviHtWFuiKxBgonjp3NEY-xzrIXBBssPiQ='
+    assert actual == expected
+
+
 def test_create_s3_arn():
     s3_arn = create_aws_s3_arn('dp-dev-not-existing')
     assert_equal(s3_arn, 'arn:aws:s3:::dp-dev-not-existing')
