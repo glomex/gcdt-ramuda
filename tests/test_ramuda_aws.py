@@ -18,7 +18,7 @@ from gcdt.ramuda_core import delete_lambda, deploy_lambda, ping, \
     _lambda_add_time_schedule_event_source, \
     wire, unwire, _lambda_add_invoke_permission, list_functions, \
     _update_lambda_configuration, get_metrics, rollback, _get_alias_version, \
-    bundle_lambda
+    bundle_lambda, info
 from gcdt.ramuda_utils import list_lambda_versions, make_zip_file_bytes, \
     create_sha256, get_remote_code_hash
 from .helpers import cleanup_tempfiles, temp_folder
@@ -70,7 +70,8 @@ def temp_lambda(awsclient):
     # create the function
     role_arn = create_lambda_role_helper(awsclient, role_name)
     create_lambda_helper(awsclient, lambda_name, role_arn,
-                         './resources/sample_lambda/handler.py',
+                         #'./resources/sample_lambda/handler.py',
+                         here('./resources/sample_lambda/handler.py'),
                          lambda_handler='handler.handle')
     yield lambda_name, role_name, role_arn
     # cleanup
@@ -895,3 +896,23 @@ def test_bundle_lambda_exceeds_limit(temp_folder, awsclient):
         )
 
     assert_equal(exit_code, 1)
+
+
+@pytest.mark.aws
+@check_preconditions
+def test_info(awsclient, temp_lambda, capsys):
+    function_name = temp_lambda[0]
+    info(awsclient, function_name)
+    out, err = capsys.readouterr()
+    assert '### PERMISSIONS ###' in out
+    assert '### EVENT SOURCES ###' in out
+
+
+# TODO test_info with s3 and timed event sources
+# TODO
+# _ensure_cloudwatch_event
+# wire
+# _get_lambda_policies
+#
+#
+#

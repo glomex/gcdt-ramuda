@@ -230,7 +230,7 @@ def _install_dependencies_with_pip(requirements_file, destination_folder):
     """
     if not os.path.isfile(requirements_file):
         return 0
-    # TODO: not convinced that subprocess is the best way to call a python tool
+    # TODO: definitely subprocess is NOT the best way to call a python tool!
     cmd = ['pip', 'install', '-r', requirements_file, '-t', destination_folder]
 
     try:
@@ -661,6 +661,10 @@ def delete_lambda(awsclient, function_name, s3_event_sources=[],
 
 def info(awsclient, function_name, s3_event_sources=None,
          time_event_sources=None, alias_name=ALIAS_NAME):
+    if s3_event_sources is None:
+        s3_event_sources = []
+    if time_event_sources is None:
+        time_event_sources = []
     if not lambda_exists(awsclient, function_name):
         print(colored.red('The function you try to display doesn\'t ' +
                           'exist... Bailing out...'))
@@ -697,18 +701,20 @@ def info(awsclient, function_name, s3_event_sources=None,
         print("\n### EVENT SOURCES ###\n")
 
         # S3 Events
-        client_s3 = awsclient.resource('s3')
-        client_s3_alt = awsclient.get_client('s3')
+        #client_s3 = awsclient.resource('s3')
+        #client_s3_alt = awsclient.get_client('s3')
+        client_s3 = awsclient.get_client('s3')
         for s3_event_source in s3_event_sources:
             bucket_name = s3_event_source.get('bucket')
             print('- \tS3: %s' % bucket_name)
-
-            bucket_notification = client_s3.BucketNotification(bucket_name)
+            #bucket_notification = client_s3.BucketNotification(bucket_name)
+            bucket_notification = client_s3.get_bucket_notification(
+                Bucket=bucket_name)
             bucket_notification.load()
             filter_rules = build_filter_rules(
                 s3_event_source.get('prefix', None),
                 s3_event_source.get('suffix', None))
-            response = client_s3_alt.get_bucket_notification_configuration(
+            response = client_s3.get_bucket_notification_configuration(
                 Bucket=bucket_name)
             if 'LambdaFunctionConfigurations' in response:
                 relevant_configs, irrelevant_configs = \
@@ -733,13 +739,13 @@ def info(awsclient, function_name, s3_event_sources=None,
                 print('\tNot attached')
 
         # CloudWatch Event
-        client_event = awsclient.get_client('events')
+        client_events = awsclient.get_client('events')
         for time_event in time_event_sources:
             rule_name = time_event.get('ruleName')
             print('- \tCloudWatch: %s' % rule_name)
             try:
-                rule_response = client_event.describe_rule(Name=rule_name)
-                target_list = client_event.list_targets_by_rule(
+                rule_response = client_events.describe_rule(Name=rule_name)
+                target_list = client_events.list_targets_by_rule(
                     Rule=rule_name,
                 )["Targets"]
                 if target_list:
@@ -1134,7 +1140,6 @@ def _remove_cloudwatch_rule_event(awsclient, rule_name, target_lambda_arn):
 
 def _remove_events_from_s3_bucket(awsclient, bucket_name, target_lambda_arn,
                                   filter_rule=False):
-    #resource_s3 = awsclient.resource('s3')
     client_s3 = awsclient.get_client('s3')
     # this is pointless??
     #bucket_notification = client_s3.get_bucket_notification(Bucket=bucket_name)
