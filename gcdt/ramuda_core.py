@@ -170,7 +170,6 @@ def _lambda_add_s3_event_source(awsclient, arn, event, bucket, prefix,
     :param suffix:
     :return:
     """
-    filter_rules = []
     json_data = {
         'LambdaFunctionConfigurations': [{
             'LambdaFunctionArn': arn,
@@ -192,8 +191,6 @@ def _lambda_add_s3_event_source(awsclient, arn, event, bucket, prefix,
     # http://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html
     client_s3 = awsclient.get_client('s3')
 
-    # this is pointless??
-    #bucket_notification = client_s3.get_bucket_notification(Bucket=bucket)
     bucket_configurations = client_s3.get_bucket_notification_configuration(
         Bucket=bucket)
     bucket_configurations.pop('ResponseMetadata')
@@ -701,16 +698,12 @@ def info(awsclient, function_name, s3_event_sources=None,
         print("\n### EVENT SOURCES ###\n")
 
         # S3 Events
-        #client_s3 = awsclient.resource('s3')
-        #client_s3_alt = awsclient.get_client('s3')
         client_s3 = awsclient.get_client('s3')
         for s3_event_source in s3_event_sources:
             bucket_name = s3_event_source.get('bucket')
             print('- \tS3: %s' % bucket_name)
-            #bucket_notification = client_s3.BucketNotification(bucket_name)
             bucket_notification = client_s3.get_bucket_notification(
                 Bucket=bucket_name)
-            bucket_notification.load()
             filter_rules = build_filter_rules(
                 s3_event_source.get('prefix', None),
                 s3_event_source.get('suffix', None))
@@ -1142,7 +1135,6 @@ def _remove_events_from_s3_bucket(awsclient, bucket_name, target_lambda_arn,
                                   filter_rule=False):
     client_s3 = awsclient.get_client('s3')
     # this is pointless??
-    #bucket_notification = client_s3.get_bucket_notification(Bucket=bucket_name)
     bucket_configurations = client_s3.get_bucket_notification_configuration(
         Bucket=bucket_name)
     bucket_configurations.pop('ResponseMetadata')
@@ -1162,10 +1154,6 @@ def _remove_events_from_s3_bucket(awsclient, bucket_name, target_lambda_arn,
         Bucket=bucket_name,
         NotificationConfiguration=bucket_configurations
     )
-
-    # this is pointless:
-    #bucket_configurations_2 = client_s3.get_bucket_notification_configuration(
-    #    Bucket=bucket_name)
 
 
 def _remove_permission(awsclient, function_name, statement_id, qualifier):
@@ -1219,9 +1207,5 @@ def ping(awsclient, function_name, alias_name=ALIAS_NAME, version=None):
             Qualifier=alias_name
         )
 
-    print(response['Payload'])
-    print(type(response['Payload']))
     results = response['Payload'].read()  # payload is a 'StreamingBody'
-    print(results)
-    # TODO: ping is a little boring without any output!
     return results
