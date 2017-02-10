@@ -50,7 +50,7 @@ Options:
 -h --help           show this
 '''
 
-
+'''
 def get_user_config():
     slack_token, slack_channel = read_gcdt_user_config(
         compatibility_mode='kumo')
@@ -58,7 +58,7 @@ def get_user_config():
         sys.exit(1)
     else:
         return slack_token, slack_channel
-
+'''
 
 @cmd(spec=['version'])
 def version_cmd():
@@ -82,7 +82,7 @@ def deploy_cmd(**tooldata):
     context = tooldata.get('context')
     conf = tooldata.get('config')
     awsclient = context.get('awsclient')
-    slack_token, slack_channel = get_user_config()
+    #slack_token, slack_channel = get_user_config()
     fail_deployment_on_unsuccessful_ping = read_gcdt_user_config_value(
         'ramuda.failDeploymentOnUnsuccessfulPing', False)
     lambda_name = conf.get('lambda.name')
@@ -107,8 +107,8 @@ def deploy_cmd(**tooldata):
         artifact_bucket=artifact_bucket,
         fail_deployment_on_unsuccessful_ping=
         fail_deployment_on_unsuccessful_ping,
-        slack_token=slack_token,
-        slack_channel=slack_channel,
+        slack_token=context['slack_token'],
+        slack_channel=context['slack_channel'],
         prebundle_scripts=prebundle_scripts,
         runtime=runtime
     )
@@ -128,7 +128,7 @@ def metrics_cmd(lambda_name, **tooldata):
 def delete_cmd(force, lambda_name, **tooldata):
     context = tooldata.get('context')
     awsclient = context.get('awsclient')
-    slack_token, slack_channel = get_user_config()
+    #slack_token, slack_channel = get_user_config()
     conf = read_config_if_exists(awsclient, 'lambda')
     function_name = conf.get('lambda.name', None)
     if function_name == str(lambda_name):
@@ -137,12 +137,13 @@ def delete_cmd(force, lambda_name, **tooldata):
         exit_code = delete_lambda(awsclient, lambda_name,
                                   s3_event_sources,
                                   time_event_sources,
-                                  slack_token=slack_token,
-                                  slack_channel=slack_channel)
+                                  slack_token=context['slack_token'],
+                                  slack_channel=context['slack_channel'])
     else:
         exit_code = delete_lambda(
             awsclient, lambda_name, [], [],
-            slack_token=slack_token, slack_channel=slack_channel)
+            slack_token=context['slack_token'],
+            slack_channel=context['slack_channel'])
     event = 'ramuda bot: deleted lambda function: %s' % function_name
     datadog_event_detail(context, event)
     return exit_code
@@ -166,14 +167,15 @@ def wire_cmd(**tooldata):
     context = tooldata.get('context')
     conf = tooldata.get('config')
     awsclient = context.get('awsclient')
-    slack_token, slack_channel = get_user_config()
+    #slack_token, slack_channel = get_user_config()
     # conf = read_lambda_config(awsclient)
     function_name = conf.get('lambda.name')
     s3_event_sources = conf.get('lambda.events.s3Sources', [])
     time_event_sources = conf.get('lambda.events.timeSchedules', [])
     exit_code = wire(awsclient, function_name, s3_event_sources,
                      time_event_sources,
-                     slack_token=slack_token, slack_channel=slack_channel)
+                     slack_token=context['slack_token'],
+                     slack_channel=context['slack_channel'])
     event = ('ramuda bot: wiring lambda function: ' +
              '%s with alias %s' % (function_name, 'ACTIVE'))
     datadog_event_detail(context, event)
@@ -185,14 +187,15 @@ def unwire_cmd(**tooldata):
     context = tooldata.get('context')
     conf = tooldata.get('config')
     awsclient = context.get('awsclient')
-    slack_token, slack_channel = get_user_config()
+    #slack_token, slack_channel = get_user_config()
     # conf = read_lambda_config(awsclient)
     function_name = conf.get('lambda.name')
     s3_event_sources = conf.get('lambda.events.s3Sources', [])
     time_event_sources = conf.get('lambda.events.timeSchedules', [])
     exit_code = unwire(awsclient, function_name, s3_event_sources,
                        time_event_sources,
-                       slack_token=slack_token, slack_channel=slack_channel)
+                       slack_token=context['slack_token'],
+                       slack_channel=context['slack_channel'])
     event = ('ramuda bot: UN-wiring lambda function: %s ' % function_name +
              'with alias %s' % 'ACTIVE')
     datadog_event_detail(context, event)
@@ -219,20 +222,20 @@ def rollback_cmd(lambda_name, version, **tooldata):
     # conf = tooldata.get('config')
     awsclient = context.get('awsclient')
     # are_credentials_still_valid(awsclient)
-    slack_token, slack_channel = get_user_config()
+    #slack_token, slack_channel = get_user_config()
     if version:
         exit_code = rollback(awsclient, lambda_name, 'ACTIVE',
                              version,
-                             slack_token=slack_token,
-                             slack_channel=slack_channel)
+                             slack_token=context['slack_token'],
+                             slack_channel=context['slack_channel'])
         event = ('ramuda bot: rolled back lambda function: ' +
                  '%s to version %s' % (
                      lambda_name, version))
         datadog_event_detail(context, event)
     else:
         exit_code = rollback(awsclient, lambda_name, 'ACTIVE',
-                             slack_token=slack_token,
-                             slack_channel=slack_channel)
+                             slack_token=context['slack_token'],
+                             slack_channel=context['slack_channel'])
         event = ('ramuda bot: rolled back lambda function: %s to ' +
                  'previous version') % lambda_name
         datadog_event_detail(context, event)

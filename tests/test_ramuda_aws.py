@@ -900,7 +900,7 @@ def test_bundle_lambda_exceeds_limit(temp_folder, awsclient):
 
 @pytest.mark.aws
 @check_preconditions
-def test_info(awsclient, temp_lambda, capsys):
+def test_info(awsclient, vendored_folder, temp_lambda, capsys):
     function_name = temp_lambda[0]
     info(awsclient, function_name)
     out, err = capsys.readouterr()
