@@ -21,13 +21,13 @@ from gcdt.ramuda_core import delete_lambda, deploy_lambda, ping, \
     bundle_lambda, info
 from gcdt.ramuda_utils import list_lambda_versions, make_zip_file_bytes, \
     create_sha256, get_remote_code_hash
-from .helpers import cleanup_tempfiles, temp_folder
 from . import helpers, here
-from .helpers import temp_folder, check_npm
+from .helpers import check_npm
 from .helpers_aws import create_role_helper, delete_role_helper, \
     create_lambda_helper, create_lambda_role_helper, check_preconditions, \
     settings_requirements
 from .helpers_aws import temp_bucket, awsclient  # fixtures!
+from .helpers import cleanup_tempfiles, temp_folder  # fixtures!
 
 log = setup_logger(logger_name='ramuda_test_aws')
 # TODO: speedup tests by reusing lambda functions where possible
@@ -645,19 +645,19 @@ def test_lambda_add_invoke_permission(awsclient, vendored_folder,
 
 @pytest.mark.aws
 @check_preconditions
-def test_list_functions(awsclient, vendored_folder, temp_lambda):
+def test_list_functions(awsclient, vendored_folder, temp_lambda, capsys):
     log.info('running test_list_functions')
 
     lambda_name = temp_lambda[0]
     role_name = temp_lambda[1]
 
-    out = StringIO()
-    list_functions(awsclient, out)
+    list_functions(awsclient)
+    out, err = capsys.readouterr()
 
     expected_regex = ".*%s\\n\\tMemory: 128\\n\\tTimeout: 300\\n\\tRole: arn:aws:iam::\d{12}:role\/%s\\n\\tCurrent Version: \$LATEST.*" \
                      % (lambda_name, role_name)
 
-    assert_regexp_matches(out.getvalue().strip(), expected_regex)
+    assert_regexp_matches(out.strip(), expected_regex)
 
 
 @pytest.mark.aws
@@ -681,12 +681,12 @@ def test_update_lambda_configuration(awsclient, vendored_folder, temp_lambda):
 
 @pytest.mark.aws
 @check_preconditions
-def test_get_metrics(awsclient, vendored_folder, temp_lambda):
+def test_get_metrics(awsclient, vendored_folder, temp_lambda, capsys):
     log.info('running test_get_metrics')
 
-    out = StringIO()
-    get_metrics(awsclient, temp_lambda[0], out)
-    assert_regexp_matches(out.getvalue().strip(),
+    get_metrics(awsclient, temp_lambda[0])
+    out, err = capsys.readouterr()
+    assert_regexp_matches(out.strip(),
         'Duration 0\\n\\tErrors 0\\n\\tInvocations [0,1]{1}\\n\\tThrottles 0')
 
 
@@ -913,6 +913,4 @@ def test_info(awsclient, vendored_folder, temp_lambda, capsys):
 # _ensure_cloudwatch_event
 # wire
 # _get_lambda_policies
-#
-#
 #

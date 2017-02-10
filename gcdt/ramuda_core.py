@@ -260,7 +260,7 @@ def _install_dependencies_with_npm():
     return 0
 
 
-def list_functions(awsclient, out=sys.stdout):
+def list_functions(awsclient):
     """List the deployed lambda functions and print configuration.
 
     :return: exit_code
@@ -268,15 +268,15 @@ def list_functions(awsclient, out=sys.stdout):
     client_lambda = awsclient.get_client('lambda')
     response = client_lambda.list_functions()
     for function in response['Functions']:
-        print(function['FunctionName'], file=out)
-        print('\t' 'Memory: ' + str(function['MemorySize']), file=out)
-        print('\t' 'Timeout: ' + str(function['Timeout']), file=out)
-        print('\t' 'Role: ' + str(function['Role']), file=out)
-        print('\t' 'Current Version: ' + str(function['Version']), file=out)
-        print('\t' 'Last Modified: ' + str(function['LastModified']), file=out)
-        print('\t' 'CodeSha256: ' + str(function['CodeSha256']), file=out)
+        print(function['FunctionName'])
+        print('\t' 'Memory: ' + str(function['MemorySize']))
+        print('\t' 'Timeout: ' + str(function['Timeout']))
+        print('\t' 'Role: ' + str(function['Role']))
+        print('\t' 'Current Version: ' + str(function['Version']))
+        print('\t' 'Last Modified: ' + str(function['LastModified']))
+        print('\t' 'CodeSha256: ' + str(function['CodeSha256']))
 
-        print('\n', file=out)
+        print('\n')
     return 0
 
 
@@ -564,7 +564,7 @@ def _update_lambda_configuration(awsclient, function_name, role,
     return function_version
 
 
-def get_metrics(awsclient, name, out=sys.stdout):
+def get_metrics(awsclient, name):
     """Print out cloudformation metrics for a lambda function.
 
     :param awsclient
@@ -592,8 +592,7 @@ def get_metrics(awsclient, name, out=sys.stdout):
             Unit=unit(metric)
         )
         print('\t%s %s' % (metric,
-                           repr(aggregate_datapoints(response['Datapoints']))),
-              file=out)
+                           repr(aggregate_datapoints(response['Datapoints']))))
     return 0
 
 
