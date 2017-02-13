@@ -16,7 +16,7 @@ import json
 from botocore.exceptions import ClientError as ClientError
 from clint.textui import colored
 
-from gcdt import monitoring, utils
+from gcdt import utils
 from gcdt.ramuda_utils import make_zip_file_bytes, json2table, s3_upload, \
     lambda_exists, create_sha256, get_remote_code_hash, unit, \
     aggregate_datapoints, check_buffer_exceeds_limit, list_of_dict_equals, \
@@ -208,10 +208,6 @@ def _lambda_add_s3_event_source(awsclient, arn, event, bucket, prefix,
         NotificationConfiguration=bucket_configurations
     )
 
-    # pointless??
-    #bucket_notification.reload()
-    #bucket_configurations = client_s3.get_bucket_notification_configuration(
-    #    Bucket=bucket)
     return json2table(response)
 
 
@@ -435,8 +431,6 @@ def _create_lambda(awsclient, function_name, role, handler_filename,
         awsclient, function_name, role, handler_function, description,
         timeout, memory, subnet_ids, security_groups
     )
-    #message = 'ramuda bot: created new lambda function: %s ' % function_name
-    #monitoring.slack_notification(slack_channel, message, slack_token)
     return function_version
 
 
@@ -455,8 +449,6 @@ def _update_lambda(awsclient, function_name, handler_filename,
             awsclient, function_name, role, handler_function,
             description, timeout, memory, subnet_ids, security_groups
         )
-    #message = 'ramuda bot: updated lambda function: %s ' % function_name
-    #monitoring.slack_notification(slack_channel, message, slack_token)
     return function_version
 
 
@@ -598,8 +590,6 @@ def rollback(awsclient, function_name, alias_name=ALIAS_NAME, version=None):
     """
     if version:
         print('rolling back to version {}'.format(version))
-        #message = 'ramuda bot: rolled back lambda function: {} to version %s'.format(
-        #    function_name, version)
     else:
         print('rolling back to previous version')
         version = _get_previous_version(awsclient, function_name, alias_name)
@@ -608,11 +598,8 @@ def rollback(awsclient, function_name, alias_name=ALIAS_NAME, version=None):
             return 1
 
         print('new version is %s' % str(version))
-        #message = 'ramuda bot: rolled back lambda function: {} to previous version'.format(
-        #    function_name)
 
     _update_alias(awsclient, function_name, version, alias_name)
-    #monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
@@ -635,8 +622,6 @@ def delete_lambda(awsclient, function_name, s3_event_sources=[],
 
     # TODO remove event source first and maybe also needed for permissions
     print(json2table(response))
-    #message = 'ramuda bot: deleted lambda function: %s' % function_name
-    #monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
@@ -954,9 +939,6 @@ def wire(awsclient, function_name, s3_event_sources=None,
             _ensure_cloudwatch_event(awsclient, time_event, function_name,
                                      alias_name, lambda_arn,
                                      time_event['ensure'])
-    #message = ('ramuda bot: wiring lambda function: ' +
-    #           '%s with alias %s' % (function_name, alias_name))
-    #monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
@@ -1073,9 +1055,6 @@ def unwire(awsclient, function_name, s3_event_sources=None,
             rule_name = time_event.get('ruleName')
             _remove_cloudwatch_rule_event(awsclient, rule_name, lambda_arn)
 
-    #message = ('ramuda bot: UN-wiring lambda function: %s ' % function_name +
-    #           'with alias %s' % alias_name)
-    #monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
