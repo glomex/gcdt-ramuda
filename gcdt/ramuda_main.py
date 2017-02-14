@@ -207,6 +207,10 @@ def ping_cmd(lambda_name, version=None, **tooldata):
         return 1
 
 
-if __name__ == '__main__':
+def main():
     sys.exit(gcdt_lifecycle.main(DOC, 'ramuda',
                                  dispatch_only=['version', 'clean']))
+
+
+if __name__ == '__main__':
+    main()
