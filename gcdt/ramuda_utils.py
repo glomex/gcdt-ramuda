@@ -1,26 +1,26 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
-import os
-import sys
+
+import base64
+import hashlib
 import io
 import shutil
-from functools import wraps
-from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
-import time
-import warnings
+import sys
 import threading
-import hashlib
-import base64
+import time
+from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 
+import os
 import pathspec
-from s3transfer import S3Transfer
+import warnings
 from clint.textui import colored
-from tabulate import tabulate
 from pyhocon import config_tree
+from s3transfer import S3Transfer
+from tabulate import tabulate
 
+from . import utils
 from .config_reader import read_config, get_config_name
 from .logger import setup_logger
-from . import utils
 
 log = setup_logger(logger_name='ramuda_utils')
 
@@ -112,44 +112,6 @@ def check_buffer_exceeds_limit(buf):
         log.error('See http://docs.aws.amazon.com/lambda/latest/dg/limits.html')
         return True
     return False
-
-
-# TODO: move this to utils
-# TODO: maybe this should return True/False
-def are_credentials_still_valid(awsclient):
-    """Check whether the credentials have expired.
-
-    :return: exit_code
-    """
-    client_lambda = awsclient.get_client('lambda')
-    try:
-        client_lambda.list_functions()
-    except Exception as e:
-        print(colored.red('Your credentials have expired... Please ' +
-                          'renew and try again!'))
-        return 1
-    return 0
-
-
-# TODO: is this used?
-def check_aws_credentials(awsclient):
-    """
-    A decorator that will check for valid credentials
-    """
-
-    def wrapper(func):
-        @wraps(func)
-        def wrapped(*args, **kwargs):
-            exit_code = are_credentials_still_valid(awsclient)
-            if exit_code:
-                # TODO: remove exit()
-                sys.exit()
-            result = func(*args, **kwargs)
-            return result
-
-        return wrapped
-
-    return wrapper
 
 
 def lambda_exists(awsclient, lambda_name):

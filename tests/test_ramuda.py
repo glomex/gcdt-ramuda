@@ -22,7 +22,7 @@ from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     get_bucket_from_s3_arn, build_filter_rules, create_sha256_urlsafe
 from gcdt.logger import setup_logger
 from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles, \
-    check_npm
+    check_npm_precondition
 from . import here
 
 log = setup_logger(logger_name='ramuda_test')
@@ -101,7 +101,7 @@ def test_install_dependencies_with_pip(temp_folder, cleanup_tempfiles):
 
 
 @pytest.mark.slow
-@check_npm
+@check_npm_precondition
 def test_install_dependencies_with_npm(temp_folder):
     with open('./package.json', 'w') as req:
         req.write(textwrap.dedent("""\
