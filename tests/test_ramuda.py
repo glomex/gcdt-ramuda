@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from __future__ import print_function
+from __future__ import unicode_literals, print_function
 import os
 import logging
 from StringIO import StringIO
@@ -19,10 +19,11 @@ from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda, \
 from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     aggregate_datapoints, json2table, create_sha256, ProgressPercentage, \
     list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, \
-    get_bucket_from_s3_arn, build_filter_rules
+    get_bucket_from_s3_arn, build_filter_rules, create_sha256_urlsafe
 from gcdt.logger import setup_logger
 from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles, \
-    here, check_npm
+    check_npm_precondition
+from . import here
 
 log = setup_logger(logger_name='ramuda_test')
 
@@ -100,7 +101,7 @@ def test_install_dependencies_with_pip(temp_folder, cleanup_tempfiles):
 
 
 @pytest.mark.slow
-@check_npm
+@check_npm_precondition
 def test_install_dependencies_with_npm(temp_folder):
     with open('./package.json', 'w') as req:
         req.write(textwrap.dedent("""\
@@ -135,8 +136,8 @@ def test_cleanup_bundle(temp_folder):
 
 
 def test_unit():
-    assert_equal(unit('Duration'), 'Milliseconds')
-    assert_equal(unit('Else'), 'Count')
+    assert unit('Duration') == 'Milliseconds'
+    assert unit('Else') == 'Count'
 
 
 def test_aggregate_datapoints():
@@ -195,6 +196,19 @@ def test_create_sha256():
     actual = create_sha256('Meine Oma fährt im Hühnerstall Motorrad')
     expected = 'SM6siXnsKAmQuG5egM0MYKgUU60nLFxUVeEvTcN4OFI='
     assert_equal(actual, expected)
+
+
+def test_create_sha256_urlsafe():
+    actual = create_sha256_urlsafe('Meine Oma fährt im Hühnerstall Motorrad')
+    expected = 'SM6siXnsKAmQuG5egM0MYKgUU60nLFxUVeEvTcN4OFI='
+    assert actual == expected
+
+
+def test_create_sha256_urlsafe_2():
+    code = r'PK\x03\x04\x14\x00\x00\x00\x08\x00zg+JQ\xbbI\xd6\xba\x8e\x00\x00\x8dx\x02\x00\x0c\x00\x00\x00pyparsing.py\xec\xbd\xfb...\xa4\x81%\xdd\x01\x00handler_no_ping.pyPK\x05\x06\x00\x00\x00\x00\x1f\x00\x1f\x00\xcf\x08\x00\x00Y\xde\x01\x00\x00\x00'
+    actual = create_sha256_urlsafe(code)
+    expected = 'MH2eL07LPCviHtWFuiKxBgonjp3NEY-xzrIXBBssPiQ='
+    assert actual == expected
 
 
 def test_create_s3_arn():

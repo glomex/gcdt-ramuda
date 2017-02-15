@@ -4,7 +4,7 @@
 Script to deploy Lambda functions to AWS
 """
 
-from __future__ import print_function
+from __future__ import unicode_literals, print_function
 import sys
 import os, shutil
 import subprocess
@@ -16,7 +16,7 @@ import json
 from botocore.exceptions import ClientError as ClientError
 from clint.textui import colored
 
-from gcdt import monitoring, utils
+from gcdt import utils
 from gcdt.ramuda_utils import make_zip_file_bytes, json2table, s3_upload, \
     lambda_exists, create_sha256, get_remote_code_hash, unit, \
     aggregate_datapoints, check_buffer_exceeds_limit, list_of_dict_equals, \
@@ -29,9 +29,9 @@ ALIAS_NAME = 'ACTIVE'
 ENSURE_OPTIONS = ['absent', 'exists']
 
 
-def _create_alias(boto_session, function_name, function_version,
+def _create_alias(awsclient, function_name, function_version,
                   alias_name=ALIAS_NAME):
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     response = client_lambda.create_alias(
         FunctionName=function_name,
         Name=alias_name,
@@ -41,9 +41,9 @@ def _create_alias(boto_session, function_name, function_version,
     return response['AliasArn']
 
 
-def _update_alias(boto_session, function_name, function_version,
+def _update_alias(awsclient, function_name, function_version,
                   alias_name=ALIAS_NAME):
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     response = client_lambda.update_alias(
         FunctionName=function_name,
         Name=alias_name,
@@ -53,8 +53,8 @@ def _update_alias(boto_session, function_name, function_version,
     return response['AliasArn']
 
 
-def _alias_exists(boto_session, function_name, alias_name):
-    client_lambda = boto_session.client('lambda')
+def _alias_exists(awsclient, function_name, alias_name):
+    client_lambda = awsclient.get_client('lambda')
     try:
         client_lambda.get_alias(
             FunctionName=function_name,
@@ -65,9 +65,9 @@ def _alias_exists(boto_session, function_name, alias_name):
         return False
 
 
-def _get_alias_version(boto_session, function_name, alias_name):
+def _get_alias_version(awsclient, function_name, alias_name):
     # this is used for testing - it returns the version
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     try:
         response = client_lambda.get_alias(
             FunctionName=function_name,
@@ -83,8 +83,8 @@ def _get_version_from_response(func):
     return int(version) if version.isdigit() else 0
 
 
-def _get_previous_version(boto_session, function_name, alias_name):
-    client_lambda = boto_session.client('lambda')
+def _get_previous_version(awsclient, function_name, alias_name):
+    client_lambda = awsclient.get_client('lambda')
     response = client_lambda.get_alias(
         FunctionName=function_name,
         Name=alias_name
@@ -110,18 +110,18 @@ def _get_previous_version(boto_session, function_name, alias_name):
     return str(max(0, max_version - 1))
 
 
-def _deploy_alias(boto_session, function_name, function_version,
+def _deploy_alias(awsclient, function_name, function_version,
                   alias_name=ALIAS_NAME):
-    if _alias_exists(boto_session, function_name, alias_name):
-        _update_alias(boto_session, function_name, function_version, alias_name)
+    if _alias_exists(awsclient, function_name, alias_name):
+        _update_alias(awsclient, function_name, function_version, alias_name)
     else:
-        _create_alias(boto_session, function_name, function_version, alias_name)
+        _create_alias(awsclient, function_name, function_version, alias_name)
 
 
-def _lambda_add_time_schedule_event_source(boto_session, rule_name,
+def _lambda_add_time_schedule_event_source(awsclient, rule_name,
                                            rule_description,
                                            schedule_expression, lambda_arn):
-    client_event = boto_session.client('events')
+    client_event = awsclient.get_client('events')
     client_event.put_rule(
         Name=rule_name,
         ScheduleExpression=schedule_expression,
@@ -142,12 +142,12 @@ def _lambda_add_time_schedule_event_source(boto_session, rule_name,
     return rule_response['Arn']
 
 
-def _lambda_add_invoke_permission(boto_session, function_name,
+def _lambda_add_invoke_permission(awsclient, function_name,
                                   source_principal,
                                   source_arn, alias_name=ALIAS_NAME):
     # https://www.getoto.net/noise/2015/08/20/better-together-amazon-ecs-and-aws-lambda/
     # http://docs.aws.amazon.com/cli/latest/reference/lambda/add-permission.html
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     response = client_lambda.add_permission(
         FunctionName=function_name,
         StatementId=str(uuid.uuid1()),
@@ -159,7 +159,7 @@ def _lambda_add_invoke_permission(boto_session, function_name,
     return response
 
 
-def _lambda_add_s3_event_source(boto_session, arn, event, bucket, prefix,
+def _lambda_add_s3_event_source(awsclient, arn, event, bucket, prefix,
                                 suffix):
     """Use only prefix OR suffix
 
@@ -170,7 +170,6 @@ def _lambda_add_s3_event_source(boto_session, arn, event, bucket, prefix,
     :param suffix:
     :return:
     """
-    filter_rules = []
     json_data = {
         'LambdaFunctionConfigurations': [{
             'LambdaFunctionArn': arn,
@@ -190,10 +189,8 @@ def _lambda_add_s3_event_source(boto_session, arn, event, bucket, prefix,
     })
     # http://docs.aws.amazon.com/cli/latest/reference/s3api/put-bucket-notification-configuration.html
     # http://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html
-    resource_s3 = boto_session.resource('s3')
-    client_s3 = boto_session.client('s3')
+    client_s3 = awsclient.get_client('s3')
 
-    bucket_notification = resource_s3.BucketNotification(bucket)
     bucket_configurations = client_s3.get_bucket_notification_configuration(
         Bucket=bucket)
     bucket_configurations.pop('ResponseMetadata')
@@ -206,13 +203,11 @@ def _lambda_add_s3_event_source(boto_session, arn, event, bucket, prefix,
         bucket_configurations['LambdaFunctionConfigurations'] = json_data[
             'LambdaFunctionConfigurations']
 
-    response = put_s3_lambda_notifications(bucket_configurations,
-                                           bucket_notification)
+    response = client_s3.put_bucket_notification_configuration(
+        Bucket=bucket,
+        NotificationConfiguration=bucket_configurations
+    )
 
-    bucket_notification.reload()
-
-    bucket_configurations = client_s3.get_bucket_notification_configuration(
-        Bucket=bucket)
     return json2table(response)
 
 
@@ -228,7 +223,7 @@ def _install_dependencies_with_pip(requirements_file, destination_folder):
     """
     if not os.path.isfile(requirements_file):
         return 0
-    # TODO: not convinced that subprocess is the best way to call a python tool
+    # TODO: definitely subprocess is NOT the best way to call a python tool!
     cmd = ['pip', 'install', '-r', requirements_file, '-t', destination_folder]
 
     try:
@@ -261,36 +256,35 @@ def _install_dependencies_with_npm():
     return 0
 
 
-def list_functions(boto_session, out=sys.stdout):
+def list_functions(awsclient):
     """List the deployed lambda functions and print configuration.
 
     :return: exit_code
     """
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     response = client_lambda.list_functions()
     for function in response['Functions']:
-        print(function['FunctionName'], file=out)
-        print('\t' 'Memory: ' + str(function['MemorySize']), file=out)
-        print('\t' 'Timeout: ' + str(function['Timeout']), file=out)
-        print('\t' 'Role: ' + str(function['Role']), file=out)
-        print('\t' 'Current Version: ' + str(function['Version']), file=out)
-        print('\t' 'Last Modified: ' + str(function['LastModified']), file=out)
-        print('\t' 'CodeSha256: ' + str(function['CodeSha256']), file=out)
+        print(function['FunctionName'])
+        print('\t' 'Memory: ' + str(function['MemorySize']))
+        print('\t' 'Timeout: ' + str(function['Timeout']))
+        print('\t' 'Role: ' + str(function['Role']))
+        print('\t' 'Current Version: ' + str(function['Version']))
+        print('\t' 'Last Modified: ' + str(function['LastModified']))
+        print('\t' 'CodeSha256: ' + str(function['CodeSha256']))
 
-        print('\n', file=out)
+        print('\n')
     return 0
 
 
-def deploy_lambda(boto_session, function_name, role, handler_filename,
+def deploy_lambda(awsclient, function_name, role, handler_filename,
                   handler_function,
                   folders, description, timeout, memory, subnet_ids=None,
                   security_groups=None, artifact_bucket=None,
                   fail_deployment_on_unsuccessful_ping=False,
-                  slack_token=None, slack_channel='systemmessages',
                   prebundle_scripts=None, runtime='python2.7'):
     """Create or update a lambda function.
 
-    :param boto_session:
+    :param awsclient:
     :param function_name:
     :param role:
     :param handler_filename:
@@ -303,38 +297,32 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
     :param security_groups:
     :param artifact_bucket:
     :param fail_deployment_on_unsuccessful_ping:
-    :param slack_token:
-    :param slack_channel:
     :param runtime:
     :return: exit_code
     """
-    if lambda_exists(boto_session, function_name):
-        function_version = _update_lambda(boto_session, function_name,
+    if lambda_exists(awsclient, function_name):
+        function_version = _update_lambda(awsclient, function_name,
                                           handler_filename,
                                           handler_function, folders, role,
                                           description, timeout, memory,
                                           subnet_ids, security_groups,
                                           artifact_bucket=artifact_bucket,
-                                          slack_token=slack_token,
-                                          slack_channel=slack_channel,
                                           prebundle_scripts=prebundle_scripts,
                                           runtime=runtime)
     else:
-        zipfile = _get_zipped_file(boto_session, handler_filename, folders,
+        zipfile = _get_zipped_file(awsclient, handler_filename, folders,
                                    prebundle_scripts=prebundle_scripts,
                                    runtime=runtime)
         if not zipfile:
             return 1
         log.info('buffer size: %0.2f MB' % float(len(zipfile) / 1000000.0))
-        function_version = _create_lambda(boto_session, function_name, role,
+        function_version = _create_lambda(awsclient, function_name, role,
                                           handler_filename, handler_function,
                                           folders, description, timeout,
                                           memory, subnet_ids, security_groups,
                                           artifact_bucket, zipfile,
-                                          slack_token=slack_token,
-                                          slack_channel=slack_channel,
                                           runtime=runtime)
-    pong = ping(boto_session, function_name, version=function_version)
+    pong = ping(awsclient, function_name, version=function_version)
     if 'alive' in pong:
         print(colored.green('Great you\'re already accepting a ping ' +
                             'in your Lambda function'))
@@ -345,11 +333,11 @@ def deploy_lambda(boto_session, function_name, role, handler_filename,
     else:
         print(colored.red('Please consider adding a reaction to a ' +
                           'ping event to your lambda function'))
-    _deploy_alias(boto_session, function_name, function_version)
+    _deploy_alias(awsclient, function_name, function_version)
     return 0
 
 
-def _get_zipped_file(boto_session, handler_filename, folders,
+def _get_zipped_file(awsclient, handler_filename, folders,
                      prebundle_scripts=None, runtime='python2.7'):
     if prebundle_scripts:
         prebundle_failed = utils.execute_scripts(prebundle_scripts)
@@ -367,7 +355,7 @@ def _get_zipped_file(boto_session, handler_filename, folders,
         if install_failed:
             return
 
-    zipfile = make_zip_file_bytes(boto_session, handler=handler_filename,
+    zipfile = make_zip_file_bytes(awsclient, handler=handler_filename,
                                   paths=folders)
     size_limit_exceeded = check_buffer_exceeds_limit(zipfile)
     if size_limit_exceeded:
@@ -376,16 +364,15 @@ def _get_zipped_file(boto_session, handler_filename, folders,
     return zipfile
 
 
-def _create_lambda(boto_session, function_name, role, handler_filename,
+def _create_lambda(awsclient, function_name, role, handler_filename,
                    handler_function,
                    folders, description, timeout, memory,
                    subnet_ids=None, security_groups=None,
-                   artifact_bucket=None, zipfile=None, slack_token=None,
-                   slack_channel='systemmessages', runtime='python2.7'):
+                   artifact_bucket=None, zipfile=None, runtime='python2.7'):
     log.debug('create lambda function: %s' % function_name)
     # move to caller!
     # _install_dependencies_with_pip('requirements.txt', './vendored')
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     # print ('creating function %s with role %s handler %s folders %s timeout %s memory %s') % (
     # function_name, role, handler_filename, str(folders), str(timeout), str(memory))
 
@@ -408,7 +395,7 @@ def _create_lambda(boto_session, function_name, role, handler_filename,
         log.debug('create with artifact bucket...')
         # print 'uploading bundle to s3'
         dest_key, e_tag, version_id = \
-            s3_upload(boto_session, artifact_bucket, zipfile, function_name)
+            s3_upload(awsclient, artifact_bucket, zipfile, function_name)
         # print dest_key, e_tag, version_id
         response = client_lambda.create_function(
             FunctionName=function_name,
@@ -441,36 +428,31 @@ def _create_lambda(boto_session, function_name, role, handler_filename,
     #       2) I believe this was implemented as shortcut to set subnet, and sg
     #          a way better way is to set this is using the using VPCConfig argument!
     _update_lambda_configuration(
-        boto_session, function_name, role, handler_function, description,
+        awsclient, function_name, role, handler_function, description,
         timeout, memory, subnet_ids, security_groups
     )
-    message = 'ramuda bot: created new lambda function: %s ' % function_name
-    monitoring.slack_notification(slack_channel, message, slack_token)
     return function_version
 
 
-def _update_lambda(boto_session, function_name, handler_filename,
+def _update_lambda(awsclient, function_name, handler_filename,
                    handler_function, folders,
                    role, description, timeout, memory, subnet_ids=None,
                    security_groups=None, artifact_bucket=None,
-                   slack_token=None, slack_channel='systemmessages',
                    prebundle_scripts=None, runtime='python2.7'):
     log.debug('update lambda function: %s' % function_name)
-    _update_lambda_function_code(boto_session, function_name, handler_filename,
+    _update_lambda_function_code(awsclient, function_name, handler_filename,
                                  folders, artifact_bucket=artifact_bucket,
                                  prebundle_scripts=prebundle_scripts,
                                  runtime=runtime)
     function_version = \
         _update_lambda_configuration(
-            boto_session, function_name, role, handler_function,
+            awsclient, function_name, role, handler_function,
             description, timeout, memory, subnet_ids, security_groups
         )
-    message = 'ramuda bot: updated lambda function: %s ' % function_name
-    monitoring.slack_notification(slack_channel, message, slack_token)
     return function_version
 
 
-def bundle_lambda(boto_session, handler_filename, folders, prebundle_scripts=None,
+def bundle_lambda(awsclient, handler_filename, folders, prebundle_scripts=None,
                   runtime='python2.7'):
     """Prepare a zip file for the lambda function and dependencies.
 
@@ -479,7 +461,7 @@ def bundle_lambda(boto_session, handler_filename, folders, prebundle_scripts=Non
     :return: exit_code
     """
 
-    zipfile = _get_zipped_file(boto_session, handler_filename, folders,
+    zipfile = _get_zipped_file(awsclient, handler_filename, folders,
                                prebundle_scripts=prebundle_scripts,
                                runtime=runtime)
     if not zipfile:
@@ -491,10 +473,10 @@ def bundle_lambda(boto_session, handler_filename, folders, prebundle_scripts=Non
 
 
 def _update_lambda_function_code(
-        boto_session, function_name, handler_filename, folders,
+        awsclient, function_name, handler_filename, folders,
         artifact_bucket=None, prebundle_scripts=None, runtime='python2.7'):
-    client_lambda = boto_session.client('lambda')
-    zipfile = _get_zipped_file(boto_session, handler_filename, folders,
+    client_lambda = awsclient.get_client('lambda')
+    zipfile = _get_zipped_file(awsclient, handler_filename, folders,
                                prebundle_scripts=prebundle_scripts,
                                runtime=runtime)
     if not zipfile:
@@ -503,7 +485,7 @@ def _update_lambda_function_code(
     # print ('getting remote hash')
 
     # print local_hash
-    remote_hash = get_remote_code_hash(boto_session, function_name)
+    remote_hash = get_remote_code_hash(awsclient, function_name)
     # print remote_hash
     if local_hash == remote_hash:
         print('Code hasn\'t changed - won\'t upload code bundle')
@@ -518,7 +500,7 @@ def _update_lambda_function_code(
         else:
             # reuse the zipfile we already created!
             dest_key, e_tag, version_id = \
-                s3_upload(boto_session, artifact_bucket, zipfile, function_name)
+                s3_upload(awsclient, artifact_bucket, zipfile, function_name)
             # print dest_key, e_tag, version_id
             response = client_lambda.update_function_code(
                 FunctionName=function_name,
@@ -531,11 +513,11 @@ def _update_lambda_function_code(
     return 0
 
 
-def _update_lambda_configuration(boto_session, function_name, role,
+def _update_lambda_configuration(awsclient, function_name, role,
                                  handler_function,
                                  description, timeout, memory, subnet_ids=None,
                                  security_groups=None):
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     if subnet_ids and security_groups:
         # print ('found vpc config')
         response = client_lambda.update_function_configuration(
@@ -565,15 +547,15 @@ def _update_lambda_configuration(boto_session, function_name, role,
     return function_version
 
 
-def get_metrics(boto_session, name, out=sys.stdout):
+def get_metrics(awsclient, name):
     """Print out cloudformation metrics for a lambda function.
 
-    :param boto_session
+    :param awsclient
     :param name: name of the lambda function
     :return: exit_code
     """
     metrics = ['Duration', 'Errors', 'Invocations', 'Throttles']
-    client_cw = boto_session.client('cloudwatch')
+    client_cw = awsclient.get_client('cloudwatch')
     for metric in metrics:
         response = client_cw.get_metric_statistics(
             Namespace='AWS/Lambda',
@@ -593,78 +575,68 @@ def get_metrics(boto_session, name, out=sys.stdout):
             Unit=unit(metric)
         )
         print('\t%s %s' % (metric,
-                           repr(aggregate_datapoints(response['Datapoints']))),
-              file=out)
+                           repr(aggregate_datapoints(response['Datapoints']))))
     return 0
 
 
-def rollback(boto_session, function_name, alias_name=ALIAS_NAME, version=None,
-             slack_token=None, slack_channel='systemmessages'):
+def rollback(awsclient, function_name, alias_name=ALIAS_NAME, version=None):
     """Rollback a lambda function to a given version.
 
-    :param boto_session:
+    :param awsclient:
     :param function_name:
     :param alias_name:
     :param version:
-    :param slack_token:
-    :param slack_channel:
     :return: exit_code
     """
     if version:
         print('rolling back to version {}'.format(version))
-        message = 'ramuda bot: rolled back lambda function: {} to version %s'.format(
-            function_name, version)
     else:
         print('rolling back to previous version')
-        version = _get_previous_version(boto_session, function_name, alias_name)
+        version = _get_previous_version(awsclient, function_name, alias_name)
         if version == '0':
             print('unable to find previous version of lambda function')
             return 1
 
         print('new version is %s' % str(version))
-        message = 'ramuda bot: rolled back lambda function: {} to previous version'.format(
-            function_name)
 
-    _update_alias(boto_session, function_name, version, alias_name)
-    monitoring.slack_notification(slack_channel, message, slack_token)
+    _update_alias(awsclient, function_name, version, alias_name)
     return 0
 
 
-def delete_lambda(boto_session, function_name, s3_event_sources=[],
-                  time_event_sources=[],
-                  slack_token=None, slack_channel='systemmessages'):
+def delete_lambda(awsclient, function_name, s3_event_sources=[],
+                  time_event_sources=[]):
     # FIXME: mutable default arguments!
     """Delete a lambda function.
 
-    :param boto_session:
+    :param awsclient:
     :param function_name:
     :param s3_event_sources:
     :param time_event_sources:
-    :param slack_token:
-    :param slack_channel:
     :return: exit_code
     """
-    unwire(boto_session, function_name, s3_event_sources=s3_event_sources,
+    unwire(awsclient, function_name, s3_event_sources=s3_event_sources,
            time_event_sources=time_event_sources,
            alias_name=ALIAS_NAME)
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     response = client_lambda.delete_function(FunctionName=function_name)
 
     # TODO remove event source first and maybe also needed for permissions
     print(json2table(response))
-    message = 'ramuda bot: deleted lambda function: %s' % function_name
-    monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
-def info(boto_session, function_name, s3_event_sources=None,
+def info(awsclient, function_name, s3_event_sources=None,
          time_event_sources=None, alias_name=ALIAS_NAME):
-    if not lambda_exists(boto_session, function_name):
+    if s3_event_sources is None:
+        s3_event_sources = []
+    if time_event_sources is None:
+        time_event_sources = []
+    if not lambda_exists(awsclient, function_name):
         print(colored.red('The function you try to display doesn\'t ' +
                           'exist... Bailing out...'))
         return 1
 
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     lambda_function = client_lambda.get_function(FunctionName=function_name)
     lambda_alias = client_lambda.get_alias(FunctionName=function_name,
                                            Name=alias_name)
@@ -695,18 +667,16 @@ def info(boto_session, function_name, s3_event_sources=None,
         print("\n### EVENT SOURCES ###\n")
 
         # S3 Events
-        client_s3 = boto_session.resource('s3')
-        client_s3_alt = boto_session.client('s3')
+        client_s3 = awsclient.get_client('s3')
         for s3_event_source in s3_event_sources:
             bucket_name = s3_event_source.get('bucket')
             print('- \tS3: %s' % bucket_name)
-
-            bucket_notification = client_s3.BucketNotification(bucket_name)
-            bucket_notification.load()
+            bucket_notification = client_s3.get_bucket_notification(
+                Bucket=bucket_name)
             filter_rules = build_filter_rules(
                 s3_event_source.get('prefix', None),
                 s3_event_source.get('suffix', None))
-            response = client_s3_alt.get_bucket_notification_configuration(
+            response = client_s3.get_bucket_notification_configuration(
                 Bucket=bucket_name)
             if 'LambdaFunctionConfigurations' in response:
                 relevant_configs, irrelevant_configs = \
@@ -731,13 +701,13 @@ def info(boto_session, function_name, s3_event_sources=None,
                 print('\tNot attached')
 
         # CloudWatch Event
-        client_event = boto_session.client('events')
+        client_events = awsclient.get_client('events')
         for time_event in time_event_sources:
             rule_name = time_event.get('ruleName')
             print('- \tCloudWatch: %s' % rule_name)
             try:
-                rule_response = client_event.describe_rule(Name=rule_name)
-                target_list = client_event.list_targets_by_rule(
+                rule_response = client_events.describe_rule(Name=rule_name)
+                target_list = client_events.list_targets_by_rule(
                     Rule=rule_name,
                 )["Targets"]
                 if target_list:
@@ -772,13 +742,13 @@ def filter_bucket_notifications_with_arn(lambda_function_configurations,
     return matching_notifications, not_matching_notifications
 
 
-def _ensure_s3_event(boto_session, s3_event_source, function_name, alias_name,
+def _ensure_s3_event(awsclient, s3_event_source, function_name, alias_name,
                      target_lambda_arn, ensure="exists"):
     if ensure not in ENSURE_OPTIONS:
         print("{} is invalid ensure option, should be {}".format(ensure,
                                                                  ENSURE_OPTIONS))
 
-    client_s3 = boto_session.client('s3')
+    client_s3 = awsclient.get_client('s3')
 
     bucket_name = s3_event_source.get('bucket')
     event_type = s3_event_source.get('type')
@@ -806,7 +776,7 @@ def _ensure_s3_event(boto_session, s3_event_source, function_name, alias_name,
     # permissions_exists
     permission_exists = False
     if rule_exists:
-        policies = _get_lambda_policies(boto_session, function_name, alias_name)
+        policies = _get_lambda_policies(awsclient, function_name, alias_name)
         if policies:
             for statement in policies['Statement']:
                 if statement['Principal']['Service'] == 's3.amazonaws.com':
@@ -823,7 +793,7 @@ def _ensure_s3_event(boto_session, s3_event_source, function_name, alias_name,
             for rule in filter_rules:
                 print(colored.magenta(
                     '\t\t{}: {}'.format(rule['Name'], rule['Value'])))
-            _wire_s3_to_lambda(boto_session, s3_event_source, function_name,
+            _wire_s3_to_lambda(awsclient, s3_event_source, function_name,
                                target_lambda_arn)
         elif ensure == "absent":
             return 0
@@ -834,12 +804,12 @@ def _ensure_s3_event(boto_session, s3_event_source, function_name, alias_name,
             for rule in filter_rules:
                 print(colored.magenta(
                     '\t\t{}: {}'.format(rule['Name'], rule['Value'])))
-            _remove_permission(boto_session, function_name, permission_exists, alias_name)
-            _remove_events_from_s3_bucket(boto_session, bucket_name, target_lambda_arn,
+            _remove_permission(awsclient, function_name, permission_exists, alias_name)
+            _remove_events_from_s3_bucket(awsclient, bucket_name, target_lambda_arn,
                                           filter_rules)
 
 
-def _ensure_cloudwatch_event(boto_session, time_event, function_name,
+def _ensure_cloudwatch_event(awsclient, time_event, function_name,
                              alias_name, lambda_arn, ensure='exists'):
     if not ensure in ENSURE_OPTIONS:
         print("{} is invalid ensure option, should be {}".format(ensure,
@@ -848,7 +818,7 @@ def _ensure_cloudwatch_event(boto_session, time_event, function_name,
     rule_name = time_event.get('ruleName')
     rule_description = time_event.get('ruleDescription')
     schedule_expression = time_event.get('scheduleExpression')
-    client_event = boto_session.client('events')
+    client_event = awsclient.get_client('events')
 
     rule_exists = False
     schedule_expression_match = False
@@ -869,7 +839,7 @@ def _ensure_cloudwatch_event(boto_session, time_event, function_name,
 
     permission_exists = False
     if rule_exists:
-        policies = _get_lambda_policies(boto_session, function_name, alias_name)
+        policies = _get_lambda_policies(awsclient, function_name, alias_name)
         if policies:
             for statement in policies['Statement']:
                 if statement['Principal']['Service'] == 'events.amazonaws.com':
@@ -885,10 +855,10 @@ def _ensure_cloudwatch_event(boto_session, time_event, function_name,
                 "\tWiring Cloudwatch event {}\n\t\t{}".format(rule_name,
                                                               schedule_expression)))
             rule_arn = _lambda_add_time_schedule_event_source(
-                boto_session, rule_name, rule_description, schedule_expression,
+                awsclient, rule_name, rule_description, schedule_expression,
                 lambda_arn)
             _lambda_add_invoke_permission(
-                boto_session, function_name, 'events.amazonaws.com', rule_arn)
+                awsclient, function_name, 'events.amazonaws.com', rule_arn)
         elif ensure == 'absent':
             return 0
     if rule_exists and permission_exists:
@@ -902,17 +872,17 @@ def _ensure_cloudwatch_event(boto_session, time_event, function_name,
                         not_matching_schedule_expression,
                         schedule_expression)))
                 rule_arn = _lambda_add_time_schedule_event_source(
-                    boto_session, rule_name, rule_description,
+                    awsclient, rule_name, rule_description,
                     schedule_expression, lambda_arn)
         if ensure == 'absent':
             print(colored.magenta("\tRemoving rule {}\n\t\t{}".format(rule_name,
                                                                       schedule_expression)))
-            _remove_permission(boto_session, function_name, statement['Sid'],
+            _remove_permission(awsclient, function_name, statement['Sid'],
                                alias_name)
-            _remove_cloudwatch_rule_event(boto_session, rule_name, lambda_arn)
+            _remove_cloudwatch_rule_event(awsclient, rule_name, lambda_arn)
 
 
-def _wire_s3_to_lambda(boto_session, s3_event_source, function_name,
+def _wire_s3_to_lambda(awsclient, s3_event_source, function_name,
                        target_lambda_arn):
     bucket_name = s3_event_source.get('bucket')
     event_type = s3_event_source.get('type')
@@ -920,32 +890,29 @@ def _wire_s3_to_lambda(boto_session, s3_event_source, function_name,
     suffix = s3_event_source.get('suffix', None)
     s3_arn = create_aws_s3_arn(bucket_name)
 
-    _lambda_add_invoke_permission(boto_session, function_name,
+    _lambda_add_invoke_permission(awsclient, function_name,
                                   's3.amazonaws.com', s3_arn)
-    _lambda_add_s3_event_source(boto_session, target_lambda_arn, event_type,
+    _lambda_add_s3_event_source(awsclient, target_lambda_arn, event_type,
                                 bucket_name, prefix, suffix)
 
 
-def wire(boto_session, function_name, s3_event_sources=None,
+def wire(awsclient, function_name, s3_event_sources=None,
          time_event_sources=None,
-         alias_name=ALIAS_NAME, slack_token=None,
-         slack_channel='systemmessages'):
+         alias_name=ALIAS_NAME):
     """Wiring a lambda function to events.
 
-    :param boto_session:
+    :param awsclient:
     :param function_name:
     :param s3_event_sources:
     :param time_event_sources:
     :param alias_name:
-    :param slack_token:
-    :param slack_channel:
     :return: exit_code
     """
-    if not lambda_exists(boto_session, function_name):
+    if not lambda_exists(awsclient, function_name):
         print(colored.red('The function you try to wire up doesn\'t ' +
                           'exist... Bailing out...'))
         return 1
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     lambda_function = client_lambda.get_function(FunctionName=function_name)
     lambda_arn = client_lambda.get_alias(FunctionName=function_name,
                                          Name=alias_name)['AliasArn']
@@ -958,23 +925,20 @@ def wire(boto_session, function_name, s3_event_sources=None,
             filter_events_ensure(time_event_sources)
 
         for s3_event_source in s3_events_ensure_absent:
-            _ensure_s3_event(boto_session, s3_event_source, function_name,
+            _ensure_s3_event(awsclient, s3_event_source, function_name,
                              alias_name, lambda_arn, s3_event_source['ensure'])
         for s3_event_source in s3_events_ensure_exists:
-            _ensure_s3_event(boto_session, s3_event_source, function_name,
+            _ensure_s3_event(awsclient, s3_event_source, function_name,
                              alias_name, lambda_arn, s3_event_source['ensure'])
 
         for time_event in cloudwatch_events_ensure_absent:
-            _ensure_cloudwatch_event(boto_session, time_event, function_name,
+            _ensure_cloudwatch_event(awsclient, time_event, function_name,
                                      alias_name, lambda_arn,
                                      time_event['ensure'])
         for time_event in cloudwatch_events_ensure_exists:
-            _ensure_cloudwatch_event(boto_session, time_event, function_name,
+            _ensure_cloudwatch_event(awsclient, time_event, function_name,
                                      alias_name, lambda_arn,
                                      time_event['ensure'])
-    message = ('ramuda bot: wiring lambda function: ' +
-               '%s with alias %s' % (function_name, alias_name))
-    monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
@@ -1000,8 +964,8 @@ def filter_events_ensure(event_sources):
     return events_ensure_exists, events_ensure_absent
 
 
-def _get_lambda_policies(boto_session, function_name, alias_name):
-    client_lambda = boto_session.client('lambda')
+def _get_lambda_policies(awsclient, function_name, alias_name):
+    client_lambda = awsclient.get_client('lambda')
     policies = None
     try:
         result = client_lambda.get_policy(FunctionName=function_name,
@@ -1015,27 +979,24 @@ def _get_lambda_policies(boto_session, function_name, alias_name):
     return policies
 
 
-def unwire(boto_session, function_name, s3_event_sources=None,
+def unwire(awsclient, function_name, s3_event_sources=None,
            time_event_sources=None,
-           alias_name=ALIAS_NAME, slack_token=None,
-           slack_channel='systemmessages'):
+           alias_name=ALIAS_NAME):
     """Unwire an event from a lambda function.
 
-    :param boto_session:
+    :param awsclient:
     :param function_name:
     :param s3_event_sources:
     :param time_event_sources:
     :param alias_name:
-    :param slack_token:
-    :param slack_channel:
     :return: exit_code
     """
-    if not lambda_exists(boto_session, function_name):
+    if not lambda_exists(awsclient, function_name):
         print(colored.red('The function you try to wire up doesn\'t ' +
                           'exist... Bailing out...'))
         return 1
 
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     lambda_function = client_lambda.get_function(FunctionName=function_name)
     lambda_arn = client_lambda.get_alias(FunctionName=function_name,
                                          Name=alias_name)['AliasArn']
@@ -1061,17 +1022,17 @@ def unwire(boto_session, function_name, s3_event_sources=None,
                         statement['Condition']['ArnLike']['AWS:SourceArn'])
                     print('\tRemoving S3 permission {} invoking {}'.format(
                         source_bucket, lambda_arn))
-                    _remove_permission(boto_session, function_name,
+                    _remove_permission(awsclient, function_name,
                                        statement['Sid'], alias_name)
                     print('\tRemoving All S3 events {} invoking {}'.format(
                         source_bucket, lambda_arn))
-                    _remove_events_from_s3_bucket(boto_session, source_bucket,
+                    _remove_events_from_s3_bucket(awsclient, source_bucket,
                                                   lambda_arn)
 
         # Case: s3 events without permissions active "safety measure"
         for s3_event_source in s3_event_sources:
             bucket_name = s3_event_source.get('bucket')
-            _remove_events_from_s3_bucket(boto_session, bucket_name, lambda_arn)
+            _remove_events_from_s3_bucket(awsclient, bucket_name, lambda_arn)
 
         #### CloudWatch Events
         # for every permission - delete it and corresponding rule (if exists)
@@ -1083,25 +1044,22 @@ def unwire(boto_session, function_name, s3_event_sources=None,
                     print(
                         '\tRemoving Cloudwatch permission {} invoking {}'.format(
                             rule_name, lambda_arn))
-                    _remove_permission(boto_session, function_name,
+                    _remove_permission(awsclient, function_name,
                                        statement['Sid'], alias_name)
                     print('\tRemoving Cloudwatch rule {} invoking {}'.format(
                         rule_name, lambda_arn))
-                    _remove_cloudwatch_rule_event(boto_session, rule_name,
+                    _remove_cloudwatch_rule_event(awsclient, rule_name,
                                                   lambda_arn)
         # Case: rules without permissions active, "safety measure"
         for time_event in time_event_sources:
             rule_name = time_event.get('ruleName')
-            _remove_cloudwatch_rule_event(boto_session, rule_name, lambda_arn)
+            _remove_cloudwatch_rule_event(awsclient, rule_name, lambda_arn)
 
-    message = ('ramuda bot: UN-wiring lambda function: %s ' % function_name +
-               'with alias %s' % alias_name)
-    monitoring.slack_notification(slack_channel, message, slack_token)
     return 0
 
 
-def _remove_cloudwatch_rule_event(boto_session, rule_name, target_lambda_arn):
-    client_event = boto_session.client('events')
+def _remove_cloudwatch_rule_event(awsclient, rule_name, target_lambda_arn):
+    client_event = awsclient.get_client('events')
     try:
         target_list = client_event.list_targets_by_rule(
             Rule=rule_name,
@@ -1130,11 +1088,10 @@ def _remove_cloudwatch_rule_event(boto_session, rule_name, target_lambda_arn):
         )
 
 
-def _remove_events_from_s3_bucket(boto_session, bucket_name, target_lambda_arn,
+def _remove_events_from_s3_bucket(awsclient, bucket_name, target_lambda_arn,
                                   filter_rule=False):
-    resource_s3 = boto_session.resource('s3')
-    client_s3 = boto_session.client('s3')
-    bucket_notification = resource_s3.BucketNotification(bucket_name)
+    client_s3 = awsclient.get_client('s3')
+    # this is pointless??
     bucket_configurations = client_s3.get_bucket_notification_configuration(
         Bucket=bucket_name)
     bucket_configurations.pop('ResponseMetadata')
@@ -1150,22 +1107,14 @@ def _remove_events_from_s3_bucket(boto_session, bucket_name, target_lambda_arn,
         if 'LambdaFunctionConfigurations' in bucket_configurations:
             bucket_configurations.pop('LambdaFunctionConfigurations')
 
-    response = put_s3_lambda_notifications(bucket_configurations,
-                                           bucket_notification)
-    bucket_configurations_2 = client_s3.get_bucket_notification_configuration(
-        Bucket=bucket_name)
-
-
-def put_s3_lambda_notifications(configurations, bucket_notification):
-    response = bucket_notification.put(
-        NotificationConfiguration=configurations
+    response = client_s3.put_bucket_notification_configuration(
+        Bucket=bucket_name,
+        NotificationConfiguration=bucket_configurations
     )
-    bucket_notification.reload()
-    return response
 
 
-def _remove_permission(boto_session, function_name, statement_id, qualifier):
-    client_lambda = boto_session.client('lambda')
+def _remove_permission(awsclient, function_name, statement_id, qualifier):
+    client_lambda = awsclient.get_client('lambda')
     response_remove = client_lambda.remove_permission(
         FunctionName=function_name,
         StatementId=statement_id,
@@ -1188,16 +1137,16 @@ def cleanup_bundle():
                 os.remove(path)
 
 
-def ping(boto_session, function_name, alias_name=ALIAS_NAME, version=None):
+def ping(awsclient, function_name, alias_name=ALIAS_NAME, version=None):
     """Send a ping request to a lambda function.
 
-    :param boto_session:
+    :param awsclient:
     :param function_name:
     :param alias_name:
     :param version:
     :return: ping response payload
     """
-    client_lambda = boto_session.client('lambda')
+    client_lambda = awsclient.get_client('lambda')
     payload = '{"ramuda_action": "ping"}'  # default to ping event
 
     if version:
@@ -1215,9 +1164,5 @@ def ping(boto_session, function_name, alias_name=ALIAS_NAME, version=None):
             Qualifier=alias_name
         )
 
-    print(response['Payload'])
-    print(type(response['Payload']))
     results = response['Payload'].read()  # payload is a 'StreamingBody'
-    print(results)
-    # TODO: ping is a little boring without any output!
     return results
