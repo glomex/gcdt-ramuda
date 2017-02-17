@@ -12,6 +12,7 @@ import uuid
 import time
 from datetime import datetime, timedelta
 import json
+import logging
 
 from botocore.exceptions import ClientError as ClientError
 from clint.textui import colored
@@ -22,9 +23,9 @@ from gcdt.ramuda_utils import make_zip_file_bytes, json2table, s3_upload, \
     aggregate_datapoints, check_buffer_exceeds_limit, list_of_dict_equals, \
     create_aws_s3_arn, get_bucket_from_s3_arn, get_rule_name_from_event_arn, \
     build_filter_rules
-from gcdt.logger import setup_logger
 
-log = setup_logger(logger_name='ramuda_core')
+
+log = logging.getLogger(__name__)
 ALIAS_NAME = 'ACTIVE'
 ENSURE_OPTIONS = ['absent', 'exists']
 
@@ -814,6 +815,7 @@ def _ensure_cloudwatch_event(awsclient, time_event, function_name,
     if not ensure in ENSURE_OPTIONS:
         print("{} is invalid ensure option, should be {}".format(ensure,
                                                                  ENSURE_OPTIONS))
+        # TODO unbelievable: another sys.exit in library code!!!
         sys.exit(1)
     rule_name = time_event.get('ruleName')
     rule_description = time_event.get('ruleDescription')
@@ -957,6 +959,7 @@ def filter_events_ensure(event_sources):
                         ENSURE_OPTIONS, event['ensure'])))
                 # FIXME exit in lib code!
                 # TODO: make sure it has a test!
+                # TODO unbelievable: another sys.exit in library code!!!
                 sys.exit(1)
         else:
             event['ensure'] = 'exists'

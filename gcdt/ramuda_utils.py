@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
+import logging
 
 import os
 import pathspec
@@ -20,9 +21,9 @@ from tabulate import tabulate
 
 from . import utils
 from .config_reader import read_config, get_config_name
-from .logger import setup_logger
 
-log = setup_logger(logger_name='ramuda_utils')
+
+log = logging.getLogger(__name__)
 
 
 def files_to_zip(path):

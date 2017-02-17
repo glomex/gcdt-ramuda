@@ -12,14 +12,12 @@ from clint.textui import colored
 
 from .config_reader import read_config_if_exists
 from . import utils
-from .logger import setup_logger
 from .ramuda_core import list_functions, get_metrics, deploy_lambda, \
     wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info, \
     cleanup_bundle
 from .gcdt_cmd_dispatcher import cmd
 from . import gcdt_lifecycle
 
-log = setup_logger(logger_name='ramuda')
 
 # TODO introduce own config for account detection
 # TODO re-upload on requirements.txt changes
@@ -31,20 +29,21 @@ log = setup_logger(logger_name='ramuda')
 # creating docopt parameters and usage help
 DOC = '''Usage:
         ramuda clean
-        ramuda bundle
-        ramuda deploy
+        ramuda bundle [-v]
+        ramuda deploy [-v]
         ramuda list
         ramuda metrics <lambda>
         ramuda info
-        ramuda wire
-        ramuda unwire
-        ramuda delete  -f <lambda>
-        ramuda rollback  <lambda> [<version>]
-        ramuda ping <lambda> [<version>]
+        ramuda wire [-v]
+        ramuda unwire [-v]
+        ramuda delete [-v] -f <lambda>
+        ramuda rollback [-v] <lambda> [<version>]
+        ramuda ping [-v] <lambda> [<version>]
         ramuda version
 
 Options:
 -h --help           show this
+-v --verbose        show debug messages
 '''
 
 
