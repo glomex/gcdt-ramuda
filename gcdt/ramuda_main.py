@@ -10,7 +10,6 @@ import sys
 
 from clint.textui import colored
 
-#from .config_reader import read_config_if_exists
 from . import utils
 from .ramuda_core import list_functions, get_metrics, deploy_lambda, \
     wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info, \
@@ -67,24 +66,24 @@ def list_cmd(**tooldata):
 @cmd(spec=['deploy'])
 def deploy_cmd(**tooldata):
     context = tooldata.get('context')
-    conf = tooldata.get('config')
+    config = tooldata.get('config')
     awsclient = context.get('_awsclient')
-    #fail_deployment_on_unsuccessful_ping = read_gcdt_user_config_value(
-    #    'ramuda.failDeploymentOnUnsuccessfulPing', False)
-    fail_deployment_on_unsuccessful_ping = False
-    lambda_name = conf.get('lambda.name')
-    lambda_description = conf.get('lambda.description')
-    role_arn = conf.get('lambda.role')
-    lambda_handler = conf.get('lambda.handlerFunction')
-    handler_filename = conf.get('lambda.handlerFile')
-    timeout = int(conf.get_string('lambda.timeout'))
-    memory_size = int(conf.get_string('lambda.memorySize'))
-    folders_from_file = conf.get('bundling.folders')
-    prebundle_scripts = conf.get('bundling.preBundle', None)
-    subnet_ids = conf.get('lambda.vpc.subnetIds', None)
-    security_groups = conf.get('lambda.vpc.securityGroups', None)
-    artifact_bucket = conf.get('deployment.artifactBucket', None)
-    runtime = conf.get('lambda.runtime', 'python2.7')
+    fail_deployment_on_unsuccessful_ping = \
+        config.get('failDeploymentOnUnsuccessfulPing', False)
+    lambda_name = config['lambda'].get('name')
+    lambda_description = config['lambda'].get('description')
+    role_arn = config['lambda'].get('role')
+    lambda_handler = config['lambda'].get('handlerFunction')
+    handler_filename = config['lambda'].get('handlerFile')
+    timeout = int(config['lambda'].get('timeout'))
+    memory_size = int(config['lambda'].get('memorySize'))
+    folders_from_file = config['bundling'].get('folders')
+    prebundle_scripts = config['bundling'].get('preBundle', None)
+    subnet_ids = config['lambda'].get('vpc', None).get('subnetIds', None)
+    security_groups = config['lambda'].get('vpc', None).get('securityGroups', None)
+    artifact_bucket = config['deployment'].get('artifactBucket', None)
+    runtime = config['lambda'].get('runtime', 'python2.7')
+    settings = config['lambda'].get('settings', None)
     exit_code = deploy_lambda(
         awsclient, lambda_name, role_arn, handler_filename,
         lambda_handler, folders_from_file,
@@ -95,7 +94,8 @@ def deploy_cmd(**tooldata):
         fail_deployment_on_unsuccessful_ping=
         fail_deployment_on_unsuccessful_ping,
         prebundle_scripts=prebundle_scripts,
-        runtime=runtime
+        runtime=runtime,
+        settings=settings
     )
     return exit_code
 
@@ -110,13 +110,12 @@ def metrics_cmd(lambda_name, **tooldata):
 @cmd(spec=['delete', '-f', '<lambda>'])
 def delete_cmd(force, lambda_name, **tooldata):
     context = tooldata.get('context')
-    conf = tooldata.get('config')
+    config = tooldata.get('config')
     awsclient = context.get('_awsclient')
-    #conf = read_config_if_exists(awsclient, 'lambda')
-    function_name = conf.get('lambda.name', None)
+    function_name = config['lambda'].get('name', None)
     if function_name == str(lambda_name):
-        s3_event_sources = conf.get('lambda.events.s3Sources', [])
-        time_event_sources = conf.get('lambda.events.timeSchedules', [])
+        s3_event_sources = config['lambda'].get('events', []).get('s3Sources', [])
+        time_event_sources = config['lambda'].get('events', []).get('timeSchedules', [])
         exit_code = delete_lambda(awsclient, lambda_name,
                                   s3_event_sources,
                                   time_event_sources)
@@ -129,11 +128,11 @@ def delete_cmd(force, lambda_name, **tooldata):
 @cmd(spec=['info'])
 def info_cmd(**tooldata):
     context = tooldata.get('context')
-    conf = tooldata.get('config')
+    config = tooldata.get('config')
     awsclient = context.get('_awsclient')
-    function_name = conf.get('lambda.name')
-    s3_event_sources = conf.get('lambda.events.s3Sources', [])
-    time_event_sources = conf.get('lambda.events.timeSchedules', [])
+    function_name = config['lambda'].get('name')
+    s3_event_sources = config['lambda'].get('events', []).get('s3Sources', [])
+    time_event_sources = config['lambda'].get('events', []).get('timeSchedules', [])
     return info(awsclient, function_name, s3_event_sources,
                 time_event_sources)
 
@@ -141,11 +140,11 @@ def info_cmd(**tooldata):
 @cmd(spec=['wire'])
 def wire_cmd(**tooldata):
     context = tooldata.get('context')
-    conf = tooldata.get('config')
+    config = tooldata.get('config')
     awsclient = context.get('_awsclient')
-    function_name = conf.get('lambda.name')
-    s3_event_sources = conf.get('lambda.events.s3Sources', [])
-    time_event_sources = conf.get('lambda.events.timeSchedules', [])
+    function_name = config['lambda'].get('name')
+    s3_event_sources = config['lambda'].get('events', []).get('s3Sources', [])
+    time_event_sources = config['lambda'].get('events', []).get('timeSchedules', [])
     exit_code = wire(awsclient, function_name, s3_event_sources,
                      time_event_sources)
     return exit_code
@@ -154,11 +153,11 @@ def wire_cmd(**tooldata):
 @cmd(spec=['unwire'])
 def unwire_cmd(**tooldata):
     context = tooldata.get('context')
-    conf = tooldata.get('config')
+    config = tooldata.get('config')
     awsclient = context.get('_awsclient')
-    function_name = conf.get('lambda.name')
-    s3_event_sources = conf.get('lambda.events.s3Sources', [])
-    time_event_sources = conf.get('lambda.events.timeSchedules', [])
+    function_name = config['lambda'].get('name')
+    s3_event_sources = config['lambda'].get('events', []).get('s3Sources', [])
+    time_event_sources = config['lambda'].get('events', []).get('timeSchedules', [])
     exit_code = unwire(awsclient, function_name, s3_event_sources,
                        time_event_sources)
     return exit_code
@@ -167,14 +166,15 @@ def unwire_cmd(**tooldata):
 @cmd(spec=['bundle'])
 def bundle_cmd(**tooldata):
     context = tooldata.get('context')
-    conf = tooldata.get('config')
+    config = tooldata.get('config')
     awsclient = context.get('_awsclient')
-    runtime = conf.get('lambda.runtime', 'python2.7')
-    handler_filename = conf.get('lambda.handlerFile')
-    folders_from_file = conf.get('bundling.folders')
-    prebundle_scripts = conf.get('bundling.preBundle', None)
-    return bundle_lambda(awsclient, handler_filename,
-                         folders_from_file, prebundle_scripts, runtime)
+    runtime = config['lambda'].get('runtime', 'python2.7')
+    handler_filename = config['lambda'].get('handlerFile')
+    folders_from_file = config['bundling'].get('folders')
+    prebundle_scripts = config['bundling'].get('preBundle', None)
+    settings = config['lambda'].get('settings', None)
+    return bundle_lambda(awsclient, handler_filename, folders_from_file,
+                         prebundle_scripts, runtime, settings)
 
 
 @cmd(spec=['rollback', '<lambda>', '<version>'])

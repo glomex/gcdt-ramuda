@@ -282,7 +282,7 @@ def deploy_lambda(awsclient, function_name, role, handler_filename,
                   folders, description, timeout, memory, subnet_ids=None,
                   security_groups=None, artifact_bucket=None,
                   fail_deployment_on_unsuccessful_ping=False,
-                  prebundle_scripts=None, runtime='python2.7'):
+                  prebundle_scripts=None, runtime='python2.7', settings=None):
     """Create or update a lambda function.
 
     :param awsclient:
@@ -299,6 +299,7 @@ def deploy_lambda(awsclient, function_name, role, handler_filename,
     :param artifact_bucket:
     :param fail_deployment_on_unsuccessful_ping:
     :param runtime:
+    :param settings: ramuda config settings entry
     :return: exit_code
     """
     if lambda_exists(awsclient, function_name):
@@ -309,11 +310,13 @@ def deploy_lambda(awsclient, function_name, role, handler_filename,
                                           subnet_ids, security_groups,
                                           artifact_bucket=artifact_bucket,
                                           prebundle_scripts=prebundle_scripts,
-                                          runtime=runtime)
+                                          runtime=runtime,
+                                          settings=settings)
     else:
         zipfile = _get_zipped_file(awsclient, handler_filename, folders,
                                    prebundle_scripts=prebundle_scripts,
-                                   runtime=runtime)
+                                   runtime=runtime,
+                                   settings=settings)
         if not zipfile:
             return 1
         log.info('buffer size: %0.2f MB' % float(len(zipfile) / 1000000.0))
@@ -339,7 +342,7 @@ def deploy_lambda(awsclient, function_name, role, handler_filename,
 
 
 def _get_zipped_file(awsclient, handler_filename, folders,
-                     prebundle_scripts=None, runtime='python2.7'):
+                     prebundle_scripts=None, runtime='python2.7', settings=None):
     if prebundle_scripts:
         prebundle_failed = utils.execute_scripts(prebundle_scripts)
         if prebundle_failed:
@@ -357,7 +360,7 @@ def _get_zipped_file(awsclient, handler_filename, folders,
             return
 
     zipfile = make_zip_file_bytes(awsclient, handler=handler_filename,
-                                  paths=folders)
+                                  paths=folders, settings=settings)
     size_limit_exceeded = check_buffer_exceeds_limit(zipfile)
     if size_limit_exceeded:
         return
@@ -439,12 +442,12 @@ def _update_lambda(awsclient, function_name, handler_filename,
                    handler_function, folders,
                    role, description, timeout, memory, subnet_ids=None,
                    security_groups=None, artifact_bucket=None,
-                   prebundle_scripts=None, runtime='python2.7'):
+                   prebundle_scripts=None, runtime='python2.7', settings=None):
     log.debug('update lambda function: %s' % function_name)
     _update_lambda_function_code(awsclient, function_name, handler_filename,
                                  folders, artifact_bucket=artifact_bucket,
                                  prebundle_scripts=prebundle_scripts,
-                                 runtime=runtime)
+                                 runtime=runtime, settings=settings)
     function_version = \
         _update_lambda_configuration(
             awsclient, function_name, role, handler_function,
@@ -454,7 +457,7 @@ def _update_lambda(awsclient, function_name, handler_filename,
 
 
 def bundle_lambda(awsclient, handler_filename, folders, prebundle_scripts=None,
-                  runtime='python2.7'):
+                  runtime='python2.7', settings=None):
     """Prepare a zip file for the lambda function and dependencies.
 
     :param handler_filename:
@@ -464,7 +467,7 @@ def bundle_lambda(awsclient, handler_filename, folders, prebundle_scripts=None,
 
     zipfile = _get_zipped_file(awsclient, handler_filename, folders,
                                prebundle_scripts=prebundle_scripts,
-                               runtime=runtime)
+                               runtime=runtime, settings=settings)
     if not zipfile:
         return 1
     with open('bundle.zip', 'wb') as zfile:
@@ -475,11 +478,12 @@ def bundle_lambda(awsclient, handler_filename, folders, prebundle_scripts=None,
 
 def _update_lambda_function_code(
         awsclient, function_name, handler_filename, folders,
-        artifact_bucket=None, prebundle_scripts=None, runtime='python2.7'):
+        artifact_bucket=None, prebundle_scripts=None, runtime='python2.7',
+        settings=None):
     client_lambda = awsclient.get_client('lambda')
     zipfile = _get_zipped_file(awsclient, handler_filename, folders,
                                prebundle_scripts=prebundle_scripts,
-                               runtime=runtime)
+                               runtime=runtime, settings=settings)
     if not zipfile:
         return 1
     local_hash = create_sha256(zipfile)
