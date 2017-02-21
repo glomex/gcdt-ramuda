@@ -20,7 +20,7 @@ from s3transfer import S3Transfer
 from tabulate import tabulate
 
 from . import utils
-from .config_reader import read_config, get_config_name
+#from .config_reader import read_config, get_config_name
 
 
 log = logging.getLogger(__name__)
@@ -85,6 +85,7 @@ def make_zip_file_bytes(awsclient, paths, handler, settings='settings'):
                     z.write(full_path, archive_target)
 
             # add settings_<env>.conf file
+            # FIXME
             if os.path.isfile(get_config_name('settings')):
                 # give settings.conf -rw-r--r-- permissions
                 settings_file = ZipInfo('settings.conf')

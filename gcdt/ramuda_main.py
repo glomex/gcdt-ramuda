@@ -10,7 +10,7 @@ import sys
 
 from clint.textui import colored
 
-from .config_reader import read_config_if_exists
+#from .config_reader import read_config_if_exists
 from . import utils
 from .ramuda_core import list_functions, get_metrics, deploy_lambda, \
     wire, bundle_lambda, unwire, delete_lambda, rollback, ping, info, \
@@ -110,8 +110,9 @@ def metrics_cmd(lambda_name, **tooldata):
 @cmd(spec=['delete', '-f', '<lambda>'])
 def delete_cmd(force, lambda_name, **tooldata):
     context = tooldata.get('context')
+    conf = tooldata.get('config')
     awsclient = context.get('_awsclient')
-    conf = read_config_if_exists(awsclient, 'lambda')
+    #conf = read_config_if_exists(awsclient, 'lambda')
     function_name = conf.get('lambda.name', None)
     if function_name == str(lambda_name):
         s3_event_sources = conf.get('lambda.events.s3Sources', [])
