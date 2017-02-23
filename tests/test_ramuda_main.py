@@ -2,22 +2,20 @@
 from __future__ import unicode_literals, print_function
 import os
 import logging
-import textwrap
 
 import pytest
 from nose.tools import assert_regexp_matches
-from pyhocon import ConfigFactory
 
 from gcdt.ramuda_main import version_cmd, clean_cmd, list_cmd, deploy_cmd, \
     delete_cmd, metrics_cmd, ping_cmd
 
 from .helpers_aws import check_preconditions, get_tooldata
 from .helpers_aws import create_role_helper
-from .helpers_aws import awsclient  # fixtures!
+from .helpers_aws import awsclient, temp_bucket  # fixtures!
 from .test_ramuda_aws import vendored_folder, temp_lambda, cleanup_lambdas  # fixtures!
 from .test_ramuda_aws import cleanup_roles  # fixtures!
 from .helpers import temp_folder  # fixtures !
-from . import helpers, here
+from . import helpers
 
 # note: xzy_main tests have a more "integrative" character so focus is to make
 # sure that the gcdt parts fit together not functional coverage of the parts.
@@ -63,7 +61,8 @@ def test_list_cmd(awsclient, vendored_folder, temp_lambda, capsys):
 
 @pytest.mark.aws
 @check_preconditions
-def test_deploy_delete_cmds(awsclient, vendored_folder, cleanup_roles):
+def test_deploy_delete_cmds(awsclient, vendored_folder, cleanup_roles,
+                            temp_bucket):
     log.info('running test_create_lambda')
     temp_string = helpers.random_string()
     lambda_name = 'jenkins_test_' + temp_string
@@ -77,62 +76,71 @@ def test_deploy_delete_cmds(awsclient, vendored_folder, cleanup_roles):
     )
     cleanup_roles.append(role['RoleName'])
 
-    config_string = textwrap.dedent("""\
-        lambda {
-            name = 'tbd'
-            description = "lambda test for ramuda"
-            role = 'tbd'
-            handlerFunction = "handler.handle"
-            handlerFile = "./resources/sample_lambda/handler.py"
-            timeout = 300
-            memorySize = 256
-
-            events {
-                s3Sources = [{
-                    bucket = "jobr-test",
-                    type = "s3:ObjectCreated:*" , suffix=".gz"
-                }]
-                timeSchedules = [{
-                    ruleName = "infra-dev-sample-lambda-jobr-T1",
-                    ruleDescription = "run every 5 min from 0-5",
-                    scheduleExpression = "cron(0/5 0-5 ? * * *)"
+    config = {
+        "lambda": {
+            "name": lambda_name,
+            "description": "unittest for ramuda",
+            "role": role['Arn'],
+            "handlerFunction": "handler.handle",
+            "handlerFile": "./resources/sample_lambda/handler.py",
+            "timeout": 300,
+            "memorySize": 256,
+            "events": {
+                "s3Sources": [
+                    {
+                        "bucket": temp_bucket,
+                        "type": "s3:ObjectCreated:*",
+                        "suffix": ".gz"
+                    }
+                ],
+                "timeSchedules": [
+                    {
+                        "ruleName": "infra-dev-sample-lambda-jobr-T1",
+                        "ruleDescription": "run every 5 min from 0-5",
+                        "scheduleExpression": "cron(0/5 0-5 ? * * *)"
+                    },
+                    {
+                        "ruleName": "infra-dev-sample-lambda-jobr-T2",
+                        "ruleDescription": "run every 5 min from 8-23:59",
+                        "scheduleExpression": "cron(0/5 8-23:59 ? * * *)"
+                    }
+                ]
+            },
+            "vpc": {
+                "subnetIds": [
+                    "subnet-d5ffb0b1",
+                    "subnet-d5ffb0b1",
+                    "subnet-d5ffb0b1",
+                    "subnet-e9db9f9f"
+                ],
+                "securityGroups": [
+                    "sg-660dd700"
+                ]
+            }
+        },
+        "bundling": {
+            "zip": "bundle.zip",
+            "folders": [
+                {
+                    "source": "./vendored",
+                    "target": "."
                 },
                 {
-                    ruleName = "infra-dev-sample-lambda-jobr-T2",
-                    ruleDescription = "run every 5 min from 8-23:59",
-                    scheduleExpression = "cron(0/5 8-23:59 ? * * *)"
-                }]
-            }
-
-            vpc {
-                subnetIds = [
-                    "subnet-d5ffb0b1", "subnet-d5ffb0b1", "subnet-d5ffb0b1",
-                    "subnet-e9db9f9f"]
-                securityGroups = ["sg-660dd700"]
-            }
-        }
-
-        bundling {
-            zip = "bundle.zip"
-            folders = [
-                { source = "./vendored", target = "." },
-                { source = "./impl", target = "impl" }
+                    "source": "./impl",
+                    "target": "impl"
+                }
             ]
+        },
+        "deployment": {
+            "region": "eu-west-1"
         }
+    }
 
-        deployment {
-            region = "eu-west-1"
-        }
-        """
-                                    )
-    conf = ConfigFactory.parse_string(config_string)
-    conf['lambda']['role'] = role['Arn']
-    conf['lambda']['name'] = lambda_name
-
-    tooldata = get_tooldata(awsclient, 'ramuda', 'list', config=conf)
+    tooldata = get_tooldata(awsclient, 'ramuda', 'deploy', config=config)
     deploy_cmd(**tooldata)
 
-    tooldata['config']['command'] = 'delete'
+    # now we use the delete cmd to remove the lambda function
+    tooldata['context']['command'] = 'delete'
     delete_cmd(True, lambda_name, **tooldata)
 
 
@@ -154,8 +162,6 @@ def test_metrics_cmd(awsclient, vendored_folder, temp_lambda, capsys):
 def test_ping_cmd(awsclient, vendored_folder, temp_lambda, capsys):
     log.info('running test_ping_cmd')
     tooldata = get_tooldata(awsclient, 'ramuda', 'ping', config={})
-        #config_base_name='settings_large',
-        #location=here('./resources/sample_lambda/'))
 
     lambda_name = temp_lambda[0]
     ping_cmd(lambda_name, **tooldata)

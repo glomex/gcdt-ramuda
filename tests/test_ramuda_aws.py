@@ -2,11 +2,9 @@
 from __future__ import unicode_literals, print_function
 import os
 import shutil
-import textwrap
 import time
 import logging
 
-from pyhocon import ConfigFactory
 import pytest
 from nose.tools import assert_equal, assert_greater_equal, assert_less, \
     assert_in, assert_not_in, assert_regexp_matches, assert_true
@@ -16,8 +14,7 @@ from gcdt.ramuda_core import delete_lambda, deploy_lambda, ping, \
     wire, unwire, _lambda_add_invoke_permission, list_functions, \
     _update_lambda_configuration, get_metrics, rollback, _get_alias_version, \
     bundle_lambda, info
-from gcdt.ramuda_utils import list_lambda_versions, make_zip_file_bytes, \
-    create_sha256, get_remote_code_hash
+from gcdt.ramuda_utils import list_lambda_versions
 from . import helpers, here
 from .helpers import check_npm_precondition
 from .helpers_aws import create_role_helper, delete_role_helper, \
@@ -30,10 +27,6 @@ from .helpers import cleanup_tempfiles, temp_folder  # fixtures!
 log = logging.getLogger(__name__)
 
 
-# TODO: speedup tests by reusing lambda functions where possible
-# TODO: move AWS resource helpers to helpers_aws.py
-
-
 def get_size(start_path='.'):
     total_size = 0
     for dirpath, dirnames, filenames in os.walk(start_path):
@@ -43,6 +36,7 @@ def get_size(start_path='.'):
     return total_size
 
 
+# TODO: move AWS resource helpers to helpers_aws.py
 # TODO: if we use this we need to move some of the following code to
 # TODO: helpers_was.py!
 
@@ -114,68 +108,78 @@ def test_create_lambda(awsclient, vendored_folder, cleanup_lambdas,
     )
     cleanup_roles.append(role['RoleName'])
 
-    config_string = textwrap.dedent("""\
-        lambda {
-            name = "dp-dev-sample-lambda-jobr1"
-            description = "lambda test for ramuda"
-            role = 'unused'
-            handlerFunction = "handler.handle"
-            handlerFile = "./resources/sample_lambda/handler.py"
-            timeout = 300
-            memorySize = 256
-
-            events {
-                s3Sources = [{
-                    bucket = "jobr-test",
-                    type = "s3:ObjectCreated:*" , suffix=".gz"
-                }]
-                timeSchedules = [{
-                    ruleName = "infra-dev-sample-lambda-jobr-T1",
-                    ruleDescription = "run every 5 min from 0-5",
-                    scheduleExpression = "cron(0/5 0-5 ? * * *)"
+    config = {
+        "lambda": {
+            "name": "dp-dev-sample-lambda-jobr1",
+            "description": "lambda test for ramuda",
+            "role": "'unused'",
+            "handlerFunction": "handler.handle",
+            "handlerFile": "./resources/sample_lambda/handler.py",
+            "timeout": 300,
+            "memorySize": 256,
+            "events": {
+                "s3Sources": [
+                    {
+                        "bucket": "jobr-test",
+                        "type": "s3:ObjectCreated:*",
+                        "suffix": ".gz"
+                    }
+                ],
+                "timeSchedules": [
+                    {
+                        "ruleName": "infra-dev-sample-lambda-jobr-T1",
+                        "ruleDescription": "run every 5 min from 0-5",
+                        "scheduleExpression": "cron(0/5 0-5 ? * * *)"
+                    },
+                    {
+                        "ruleName": "infra-dev-sample-lambda-jobr-T2",
+                        "ruleDescription": "run every 5 min from 8-23:59",
+                        "scheduleExpression": "cron(0/5 8-23:59 ? * * *)"
+                    }
+                ]
+            },
+            "vpc": {
+                "subnetIds": [
+                    "subnet-d5ffb0b1",
+                    "subnet-d5ffb0b1",
+                    "subnet-d5ffb0b1",
+                    "subnet-e9db9f9f"
+                ],
+                "securityGroups": [
+                    "sg-660dd700"
+                ]
+            }
+        },
+        "bundling": {
+            "zip": "bundle.zip",
+            "folders": [
+                {
+                    "source": "./vendored",
+                    "target": "."
                 },
                 {
-                    ruleName = "infra-dev-sample-lambda-jobr-T2",
-                    ruleDescription = "run every 5 min from 8-23:59",
-                    scheduleExpression = "cron(0/5 8-23:59 ? * * *)"
-                }]
-            }
-
-            vpc {
-                subnetIds = [
-                    "subnet-d5ffb0b1", "subnet-d5ffb0b1", "subnet-d5ffb0b1",
-                    "subnet-e9db9f9f"]
-                securityGroups = ["sg-660dd700"]
-            }
-        }
-
-        bundling {
-            zip = "bundle.zip"
-            folders = [
-                { source = "./vendored", target = "." },
-                { source = "./impl", target = "impl" }
+                    "source": "./impl",
+                    "target": "impl"
+                }
             ]
+        },
+        "deployment": {
+            "region": "eu-west-1"
         }
-
-        deployment {
-            region = "eu-west-1"
-        }
-        """
-                                    )
-    conf = ConfigFactory.parse_string(config_string)
-    lambda_description = conf.get('lambda.description')
+    }
+    lambda_description = config['lambda'].get('description')
     # print (role)
     role_arn = role['Arn']
-    lambda_handler = conf.get('lambda.handlerFunction')
-    handler_filename = conf.get('lambda.handlerFile')
-    timeout = int(conf.get_string('lambda.timeout'))
-    memory_size = int(conf.get_string('lambda.memorySize'))
-    zip_name = conf.get('bundling.zip')
-    folders_from_file = conf.get('bundling.folders')
-    subnet_ids = conf.get('lambda.vpc.subnetIds', None)
-    security_groups = conf.get('lambda.vpc.securityGroups', None)
-    region = conf.get('deployment.region')
-    artifact_bucket = conf.get('deployment.artifactBucket', None)
+    lambda_handler = config['lambda'].get('handlerFunction')
+    handler_filename = config['lambda'].get('handlerFile')
+    timeout = int(config['lambda'].get('timeout'))
+    memory_size = int(config['lambda'].get('memorySize'))
+    zip_name = config['bundling'].get('zip')
+    folders_from_file = config['bundling'].get('folders')
+    subnet_ids = config['lambda'].get('vpc', None).get('subnetIds', None)
+    security_groups = config['lambda'].get('vpc', None).get('securityGroups', None)
+    region = config['deployment'].get('region')
+    artifact_bucket = config['deployment'].get('artifactBucket', None)
 
     deploy_lambda(
         awsclient=awsclient,
@@ -219,69 +223,76 @@ def test_create_lambda_nodejs(awsclient, temp_folder, cleanup_lambdas,
     )
     cleanup_roles.append(role['RoleName'])
 
-    config_string = textwrap.dedent("""\
-        lambda {
-            runtime = "nodejs4.3"
-            name = "infra-dev-sample-lambda-jobr1"
-            description = "lambda test for ramuda"
-            role = 'unused'
-            handlerFunction = "index.handler"
-            handlerFile = "index.js"
-            timeout = 300
-            memorySize = 256
-
-            events {
-                s3Sources = [{
-                    bucket = "jobr-test",
-                    type = "s3:ObjectCreated:*" , suffix=".gz"
-                }]
-                timeSchedules = [{
-                    ruleName = "infra-dev-sample-lambda-jobr-T1",
-                    ruleDescription = "run every 5 min from 0-5",
-                    scheduleExpression = "cron(0/5 0-5 ? * * *)"
-                },
+    config = {
+        "lambda": {
+            "runtime": "nodejs4.3",
+            "name": "infra-dev-sample-lambda-jobr1",
+            "description": "lambda test for ramuda",
+            "role": "'unused'",
+            "handlerFunction": "index.handler",
+            "handlerFile": "index.js",
+            "timeout": 300,
+            "memorySize": 256,
+            "events": {
+                "s3Sources": [
+                    {
+                        "bucket": "jobr-test",
+                        "type": "s3:ObjectCreated:*",
+                        "suffix": ".gz"
+                    }
+                ],
+                "timeSchedules": [
+                    {
+                        "ruleName": "infra-dev-sample-lambda-jobr-T1",
+                        "ruleDescription": "run every 5 min from 0-5",
+                        "scheduleExpression": "cron(0/5 0-5 ? * * *)"
+                    },
+                    {
+                        "ruleName": "infra-dev-sample-lambda-jobr-T2",
+                        "ruleDescription": "run every 5 min from 8-23:59",
+                        "scheduleExpression": "cron(0/5 8-23:59 ? * * *)"
+                    }
+                ]
+            },
+            "vpc": {
+                "subnetIds": [
+                    "subnet-d5ffb0b1",
+                    "subnet-d5ffb0b1",
+                    "subnet-d5ffb0b1",
+                    "subnet-e9db9f9f"
+                ],
+                "securityGroups": [
+                    "sg-660dd700"
+                ]
+            }
+        },
+        "bundling": {
+            "zip": "bundle.zip",
+            "folders": [
                 {
-                    ruleName = "infra-dev-sample-lambda-jobr-T2",
-                    ruleDescription = "run every 5 min from 8-23:59",
-                    scheduleExpression = "cron(0/5 8-23:59 ? * * *)"
-                }]
-            }
-
-            vpc {
-                subnetIds = [
-                    "subnet-d5ffb0b1", "subnet-d5ffb0b1", "subnet-d5ffb0b1",
-                    "subnet-e9db9f9f"]
-                securityGroups = ["sg-660dd700"]
-            }
-        }
-
-        bundling {
-            zip = "bundle.zip"
-            folders = [
-                { source = "./node_modules", target = "node_modules" }
+                    "source": "./node_modules",
+                    "target": "node_modules"
+                }
             ]
+        },
+        "deployment": {
+            "region": "eu-west-1"
         }
-
-        deployment {
-            region = "eu-west-1"
-        }
-        """
-                                    )
-    conf = ConfigFactory.parse_string(config_string)
-    runtime = conf.get('lambda.runtime')
-    lambda_description = conf.get('lambda.description')
+    }
+    runtime = config['lambda'].get('runtime')
+    lambda_description = config['lambda'].get('description')
     # print (role)
     role_arn = role['Arn']
-    lambda_handler = conf.get('lambda.handlerFunction')
-    handler_filename = conf.get('lambda.handlerFile')
-    timeout = int(conf.get_string('lambda.timeout'))
-    memory_size = int(conf.get_string('lambda.memorySize'))
-    zip_name = conf.get('bundling.zip')
-    folders_from_file = conf.get('bundling.folders')
-    subnet_ids = conf.get('lambda.vpc.subnetIds', None)
-    security_groups = conf.get('lambda.vpc.securityGroups', None)
-    region = conf.get('deployment.region')
-    artifact_bucket = conf.get('deployment.artifactBucket', None)
+    lambda_handler = config['lambda'].get('handlerFunction')
+    handler_filename = config['lambda'].get('handlerFile')
+    timeout = int(config['lambda'].get('timeout'))
+    memory_size = int(config['lambda'].get('memorySize'))
+    zip_name = config['bundling'].get('zip')
+    folders_from_file = config['bundling'].get('folders')
+    subnet_ids = config['lambda'].get('vpc', None).get('subnetIds', None)
+    security_groups = config['lambda'].get('vpc', None).get('securityGroups', None)
+    region = config['deployment'].get('region')
+    artifact_bucket = config['deployment'].get('artifactBucket', None)
 
     deploy_lambda(
         awsclient=awsclient,
@@ -318,67 +329,78 @@ def test_create_lambda_with_s3(awsclient, vendored_folder, cleanup_lambdas,
     )
     cleanup_roles.append(role['RoleName'])
 
-    config_string = textwrap.dedent("""\
-        lambda {
-            name = "dp-dev-sample-lambda-jobr1"
-            description = "lambda nodejs test for ramuda"
-            handlerFunction = "handler.handle"
-            handlerFile = "./resources/sample_lambda/handler.py"
-            timeout = 300
-            memorySize = 256
-
-            events {
-                s3Sources = [{
-                    bucket = "jobr-test",
-                    type = "s3:ObjectCreated:*" , suffix=".gz"
-                }]
-                timeSchedules = [{
-                    ruleName = "infra-dev-sample-lambda-jobr-T1",
-                    ruleDescription = "run every 5 min from 0-5",
-                    scheduleExpression = "cron(0/5 0-5 ? * * *)"
-                },{
-                    ruleName = "infra-dev-sample-lambda-jobr-T2",
-                    ruleDescription = "run every 5 min from 8-23:59",
-                    scheduleExpression = "cron(0/5 8-23:59 ? * * *)"
-                }]
+    config = {
+        "lambda": {
+            "name": "dp-dev-sample-lambda-jobr1",
+            "description": "lambda nodejs test for ramuda",
+            "handlerFunction": "handler.handle",
+            "handlerFile": "./resources/sample_lambda/handler.py",
+            "timeout": 300,
+            "memorySize": 256,
+            "events": {
+                "s3Sources": [
+                    {
+                        "bucket": "jobr-test",
+                        "type": "s3:ObjectCreated:*",
+                        "suffix": ".gz"
+                    }
+                ],
+                "timeSchedules": [
+                    {
+                        "ruleName": "infra-dev-sample-lambda-jobr-T1",
+                        "ruleDescription": "run every 5 min from 0-5",
+                        "scheduleExpression": "cron(0/5 0-5 ? * * *)"
+                    },
+                    {
+                        "ruleName": "infra-dev-sample-lambda-jobr-T2",
+                        "ruleDescription": "run every 5 min from 8-23:59",
+                        "scheduleExpression": "cron(0/5 8-23:59 ? * * *)"
+                    }
+                ]
+            },
+            "vpc": {
+                "subnetIds": [
+                    "subnet-d5ffb0b1",
+                    "subnet-d5ffb0b1",
+                    "subnet-d5ffb0b1",
+                    "subnet-e9db9f9f"
+                ],
+                "securityGroups": [
+                    "sg-660dd700"
+                ]
             }
-
-
-            vpc {
-                subnetIds = [
-                    "subnet-d5ffb0b1", "subnet-d5ffb0b1", "subnet-d5ffb0b1",
-                    "subnet-e9db9f9f"]
-                securityGroups = ["sg-660dd700"]
-            }
-
-        }
-
-        bundling {
-            zip = "bundle.zip"
-            folders = [
-                { source = "./vendored", target = "." },
-                { source = "./impl", target = "impl" }
+        },
+        "bundling": {
+            "zip": "bundle.zip",
+            "folders": [
+                {
+                    "source": "./vendored",
+                    "target": "."
+                },
+                {
+                    "source": "./impl",
+                    "target": "impl"
+                }
             ]
+        },
+        "deployment": {
+            "region": "eu-west-1",
+            "artifactBucket": "7finity-%s-dev-deployment" % account
         }
-
-        deployment {
-            region = "eu-west-1"
-            artifactBucket = "7finity-%s-dev-deployment"
-        }
-        """ % account)
-    conf = ConfigFactory.parse_string(config_string)
-    lambda_description = conf.get('lambda.description')
+    }
+    lambda_description = config['lambda'].get('description')
+    # print (role)
     role_arn = role['Arn']
-    lambda_handler = conf.get('lambda.handlerFunction')
-    handler_filename = conf.get('lambda.handlerFile')
-    timeout = int(conf.get_string('lambda.timeout'))
-    memory_size = int(conf.get_string('lambda.memorySize'))
-    zip_name = conf.get('bundling.zip')
-    folders_from_file = conf.get('bundling.folders')
-    subnet_ids = conf.get('lambda.vpc.subnetIds', None)
-    security_groups = conf.get('lambda.vpc.securityGroups', None)
-    region = conf.get('deployment.region')
-    artifact_bucket = conf.get('deployment.artifactBucket', None)
+    lambda_handler = config['lambda'].get('handlerFunction')
+    handler_filename = config['lambda'].get('handlerFile')
+    timeout = int(config['lambda'].get('timeout'))
+    memory_size = int(config['lambda'].get('memorySize'))
+    zip_name = config['bundling'].get('zip')
+    folders_from_file = config['bundling'].get('folders')
+    subnet_ids = config['lambda'].get('vpc', None).get('subnetIds', None)
+    security_groups = config['lambda'].get('vpc', None).get('securityGroups', None)
+    region = config['deployment'].get('region')
+    artifact_bucket = config['deployment'].get('artifactBucket', None)
 
     deploy_lambda(
         awsclient=awsclient,
@@ -446,67 +468,28 @@ def _get_count(awsclient, function_name, alias_name='ACTIVE', version=None):
     return results
 
 
-# sample config: operations/reprocessing/consumer/lambda/lambda_dev.conf
-# lambda {
-#   name = "dp-dev-operations-reprocessing-consumer"
-#   description = "Reprocessing files from SQS queue"
-#   role = "lookup:stack:dp-dev-operations-reprocessing:RoleLambdaReprocessingConsumerArn"
-#   handlerFunction = "handler.lambda_handler"
-#   handlerFile = "handler.py"
-#   timeout = 300
-#   memorySize = 128
-#
-#   events {
-#     timeSchedules = [
-#       {
-#         ruleName = "dp-dev-operations-reprocessing-consumer",
-#         ruleDescription = "run every 1 min",
-#         scheduleExpression = "rate(1 minute)"
-#       }
-#     s3Sources = [
-#       {
-#         bucket = "lookup:stack:dp-dev-ingest-sync-prod-dev:BucketAdproxyInput",
-#         type = "s3:ObjectCreated:*" , suffix=".gz"
-#       }
-#     ]
-#   }
-# }
-#
-# bundling {
-#   zip = "bundle.zip"
-#   folders = [
-#     {source = "../module", target = "./module"}
-#   ]
-# }
-#
-# deployment {
-#   region = "eu-west-1"
-# }
-
 @pytest.mark.aws
 @check_preconditions
 def test_schedule_event_source(awsclient, vendored_folder, cleanup_lambdas,
                                cleanup_roles):
     log.info('running test_schedule_event_source')
     # include reading config from settings file
-    config_string = '''
-        lambda {
-            events {
-                timeSchedules = [
+    config = {
+        "lambda": {
+            "events": {
+                "timeSchedules": [
                     {
-                        ruleName = "unittest-dev-lambda-schedule",
-                        ruleDescription = "run every 1 minute",
-                        scheduleExpression = "rate(1 minute)"
+                        "ruleName": "unittest-dev-lambda-schedule",
+                        "ruleDescription": "run every 1 minute",
+                        "scheduleExpression": "rate(1 minute)"
                     }
                 ]
             }
         }
-    '''
-    conf = ConfigFactory.parse_string(config_string)
+    }
 
-    # time_event_sources = conf.get('lambda.events.timeSchedules', [])
     # for time_event in time_event_sources:
-    time_event = conf.get('lambda.events.timeSchedules', {})[0]
+    time_event = config['lambda'].get('events', []).get('timeSchedules', [])[0]
     rule_name = time_event.get('ruleName')
     rule_description = time_event.get('ruleDescription')
     schedule_expression = time_event.get('scheduleExpression')
@@ -562,25 +545,23 @@ def test_wire_unwire_lambda_with_s3(awsclient, vendored_folder,
     cleanup_lambdas.append(lambda_name)
 
     bucket_name = temp_bucket
-
-    # include reading config from settings!
-    config_string = '''
-        lambda {
-            events {
-                s3Sources = [
+    config = {
+        "lambda": {
+            "events": {
+                "s3Sources": [
                     {
-                        bucket = "%s",
-                        type = "s3:ObjectCreated:*" , suffix=".gz"
+                        "bucket": bucket_name,
+                        "type": "s3:ObjectCreated:*",
+                        "suffix": ".gz"
                     }
                 ]
             }
         }
-    ''' % bucket_name
-    conf = ConfigFactory.parse_string(config_string)
+    }
 
     # wire the function with the bucket
-    s3_event_sources = conf.get('lambda.events.s3Sources', [])
-    time_event_sources = conf.get('lambda.events.timeSchedules', [])
+    s3_event_sources = config['lambda'].get('events', []).get('s3Sources', [])
+    time_event_sources = config['lambda'].get('events', []).get('timeSchedules', [])
     exit_code = wire(awsclient, lambda_name, s3_event_sources,
                      time_event_sources)
     assert_equal(exit_code, 0)
@@ -612,7 +593,7 @@ def test_wire_unwire_lambda_with_s3(awsclient, vendored_folder,
 
     # validate function not called
     time.sleep(10)
-    assert_equal(int(_get_count(awsclient, lambda_name)), 1)
+    assert int(_get_count(awsclient, lambda_name)) == 1
 
 
 @pytest.mark.aws
@@ -805,28 +786,46 @@ def test_prebundle(awsclient, temp_folder, cleanup_lambdas, cleanup_roles):
     role_arn = create_lambda_role_helper(awsclient, role_name)
     cleanup_roles.append(role_name)
 
-    script = lambda r: here(
-        'resources/sample_lambda_with_prebundle/{}.sh'.format(r))
-    with open(here(
-            'resources/sample_lambda_with_prebundle/lambda.conf.tpl')) as template:
-        config_string = template.read() % (
-            script('create_requirements'),
-            script('create_handler'),
-            script('create_settings')
-        )
-    conf = ConfigFactory.parse_string(config_string)
+    # TODO: add this to collection "how not to use lambda"
+    #script = lambda r: here(
+    #    'resources/sample_lambda_with_prebundle/{}.sh'.format(r))
+    def _script(name):
+        return here('resources/sample_lambda_with_prebundle/%s.sh' % name)
+
+    config = {
+        "lambda": {
+            "handlerFunction": "handler.handle",
+            "handlerFile": "handler.py",
+            "description": "Test lambda with prebundle",
+            "timeout": 300,
+            "memorySize": 128
+        },
+        "bundling": {
+            "preBundle": [
+                _script('create_requirements'),
+                _script('create_handler'),
+                _script('create_settings')
+            ],
+            "folders": [
+                {
+                    "source": "./vendored",
+                    "target": "."
+                }
+            ]
+        }
+    }
 
     deploy_lambda(
         awsclient=awsclient,
         role=role_arn,
         function_name=lambda_name,
-        handler_filename=conf.get('lambda.handlerFile'),
-        handler_function=conf.get('lambda.handlerFunction'),
-        description=conf.get('lambda.description'),
-        timeout=conf.get('lambda.timeout'),
-        memory=conf.get('lambda.memorySize'),
-        folders=conf.get('bundling.folders'),
-        prebundle_scripts=conf.get('bundling.preBundle')
+        handler_filename=config['lambda'].get('handlerFile'),
+        handler_function=config['lambda'].get('handlerFunction'),
+        description=config['lambda'].get('description'),
+        timeout=config['lambda'].get('timeout'),
+        memory=config['lambda'].get('memorySize'),
+        folders=config['bundling'].get('folders'),
+        prebundle_scripts=config['bundling'].get('preBundle')
     )
     cleanup_lambdas.append(lambda_name)
 

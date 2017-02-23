@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
-
+import os
 import base64
 import hashlib
 import io
@@ -11,16 +11,13 @@ import time
 from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 import logging
 
-import os
 import pathspec
 import warnings
 from clint.textui import colored
-from pyhocon import config_tree
 from s3transfer import S3Transfer
 from tabulate import tabulate
 
 from . import utils
-from .config_reader import read_config, get_config_name
 
 
 log = logging.getLogger(__name__)
@@ -35,12 +32,13 @@ def files_to_zip(path):
             yield full_path, archive_name
 
 
-def make_zip_file_bytes(awsclient, paths, handler, settings='settings'):
+def make_zip_file_bytes(awsclient, paths, handler, settings=None):
     """Create the bundle zip file.
 
+    :param awsclient:
     :param paths:
     :param handler:
-    :param settings:
+    :param settings: ramuda config settings entry
     :return: exit_code
     """
     log.debug('creating zip file...')
@@ -55,7 +53,7 @@ def make_zip_file_bytes(awsclient, paths, handler, settings='settings'):
      ConfigTree([('source', './impl'), ('target', './impl')])]
     """
     # automatically add vendored directory
-    vendored = config_tree.ConfigTree()
+    vendored = {}
     # check if ./vendored folder is contained!
     vendored_missing = True
     for p in paths:
@@ -64,8 +62,8 @@ def make_zip_file_bytes(awsclient, paths, handler, settings='settings'):
             break
     if vendored_missing:
         # add missing ./vendored folder to paths
-        vendored.put('source', './vendored')
-        vendored.put('target', '.')
+        vendored['source'] = './vendored'
+        vendored['target'] = '.'
         paths.append(vendored)
     cleanup_folder('./vendored')  # TODO this should be replaced by better glob!
     # TODO: also exclude *.pyc
@@ -84,20 +82,16 @@ def make_zip_file_bytes(awsclient, paths, handler, settings='settings'):
                     # print 'archive target ' + archive_target
                     z.write(full_path, archive_target)
 
-            # add settings_<env>.conf file
-            if os.path.isfile(get_config_name('settings')):
+            # add settings file
+            #if 'settings' in config and config['settings']:
+            if settings:
                 # give settings.conf -rw-r--r-- permissions
+                # TODO allow json files for non-hocon setups
                 settings_file = ZipInfo('settings.conf')
                 settings_file.external_attr = 0644 << 16L
-                z.writestr(settings_file,
-                           read_config(awsclient,
-                                       config_base_name='settings',
-                                       lookups=['stack'],
-                                       output_format='hocon'))
+                z.writestr(settings_file, settings)
             z.write(handler, os.path.basename(handler))
-    # print z.printdir()
 
-    # moved the check to check_buffer_exceeds_limit!
     return buf.getvalue()
 
 

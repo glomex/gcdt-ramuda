@@ -13,7 +13,6 @@ from s3transfer.subscribers import BaseSubscriber
 from nose.tools import assert_true, assert_false, assert_not_in, assert_in, \
     assert_equal, assert_regexp_matches
 import pytest
-import logging
 
 from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda, \
     cleanup_bundle, _install_dependencies_with_npm
@@ -27,9 +26,6 @@ from . import here
 
 
 log = logging.getLogger(__name__)
-
-
-def here(p): return os.path.join(os.path.dirname(__file__), p)
 
 
 @pytest.mark.slow
