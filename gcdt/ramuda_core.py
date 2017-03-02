@@ -6,8 +6,8 @@ Script to deploy Lambda functions to AWS
 
 from __future__ import unicode_literals, print_function
 import sys
-import os, shutil
-import subprocess
+import os
+import shutil
 import uuid
 import time
 from datetime import datetime, timedelta
@@ -17,10 +17,9 @@ import logging
 from botocore.exceptions import ClientError as ClientError
 from clint.textui import colored
 
-from gcdt import utils
-from gcdt.ramuda_utils import make_zip_file_bytes, json2table, s3_upload, \
+from gcdt.ramuda_utils import json2table, s3_upload, \
     lambda_exists, create_sha256, get_remote_code_hash, unit, \
-    aggregate_datapoints, check_buffer_exceeds_limit, list_of_dict_equals, \
+    aggregate_datapoints, list_of_dict_equals, \
     create_aws_s3_arn, get_bucket_from_s3_arn, get_rule_name_from_event_arn, \
     build_filter_rules
 
@@ -212,51 +211,6 @@ def _lambda_add_s3_event_source(awsclient, arn, event, bucket, prefix,
     return json2table(response)
 
 
-# @make_spin(Default, 'Installing dependencies...')
-def _install_dependencies_with_pip(requirements_file, destination_folder):
-    """installs dependencies from a pip requirements_file to a local
-    destination_folder
-
-    :param requirements_file path to valid requirements_file
-    :param destination_folder a foldername relative to the current working
-    directory
-    :return: exit_code
-    """
-    if not os.path.isfile(requirements_file):
-        return 0
-    # TODO: definitely subprocess is NOT the best way to call a python tool!
-    cmd = ['pip', 'install', '-r', requirements_file, '-t', destination_folder]
-
-    try:
-        result = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        # return result  # nobody used the results so far...
-    except subprocess.CalledProcessError as e:
-        sys.stderr.write(
-            '\033[01;31mError running command: %s resulted in the ' % e.cmd +
-            'following error: \033[01;32m %s' % e.output)
-        return 1
-    return 0
-
-
-def _install_dependencies_with_npm():
-    """installs dependencies from a package.json file
-
-    :return: exit_code
-    """
-    if not os.path.isfile('package.json'):
-        return 0
-    cmd = ['npm', 'install']
-
-    try:
-        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-        sys.stderr.write(
-            '\033[01;31mError running command: %s resulted in the ' % e.cmd +
-            'following error: \033[01;32m %s' % e.output)
-        return 1
-    return 0
-
-
 def list_functions(awsclient):
     """List the deployed lambda functions and print configuration.
 
@@ -339,33 +293,6 @@ def deploy_lambda(awsclient, function_name, role, handler_filename,
                           'ping event to your lambda function'))
     _deploy_alias(awsclient, function_name, function_version)
     return 0
-
-
-def _get_zipped_file(awsclient, handler_filename, folders,
-                     prebundle_scripts=None, runtime='python2.7', settings=None):
-    if prebundle_scripts:
-        prebundle_failed = utils.execute_scripts(prebundle_scripts)
-        if prebundle_failed:
-            return
-
-    if runtime == 'python2.7':
-        install_failed = \
-            _install_dependencies_with_pip('requirements.txt', './vendored')
-        if install_failed:
-            return
-    elif runtime == 'nodejs4.3':
-        install_failed = \
-            _install_dependencies_with_npm()
-        if install_failed:
-            return
-
-    zipfile = make_zip_file_bytes(awsclient, handler=handler_filename,
-                                  paths=folders, settings=settings)
-    size_limit_exceeded = check_buffer_exceeds_limit(zipfile)
-    if size_limit_exceeded:
-        return
-
-    return zipfile
 
 
 def _create_lambda(awsclient, function_name, role, handler_filename,

@@ -15,13 +15,13 @@ from gcdt.ramuda_core import delete_lambda, deploy_lambda, ping, \
     _update_lambda_configuration, get_metrics, rollback, _get_alias_version, \
     bundle_lambda, info
 from gcdt.ramuda_utils import list_lambda_versions
-from gcdt.testtools import helpers, here
-from gcdt.testtools.helpers import check_npm_precondition
-from .helpers_aws import create_role_helper, delete_role_helper, \
+from gcdt_testtools import helpers
+from gcdt_testtools.helpers import check_npm_precondition
+from gcdt_testtools.helpers_aws import create_role_helper, delete_role_helper, \
     create_lambda_helper, create_lambda_role_helper, check_preconditions, \
     settings_requirements
-from .helpers_aws import temp_bucket, awsclient  # fixtures!
-from gcdt.testtools.helpers import cleanup_tempfiles, temp_folder  # fixtures!
+from gcdt_testtools.helpers_aws import temp_bucket, awsclient  # fixtures!
+from gcdt_testtools.helpers import cleanup_tempfiles, temp_folder  # fixtures!
 from . import here
 
 

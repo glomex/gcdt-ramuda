@@ -5,118 +5,25 @@ import logging
 from StringIO import StringIO
 from collections import OrderedDict
 from tempfile import NamedTemporaryFile
-import textwrap
 import json
 import time
 
 from s3transfer.subscribers import BaseSubscriber
-from nose.tools import assert_true, assert_false, assert_not_in, assert_in, \
-    assert_equal, assert_regexp_matches
+from nose.tools import assert_true, assert_false, assert_equal, \
+    assert_regexp_matches
 import pytest
 
-from gcdt.ramuda_core import _install_dependencies_with_pip, bundle_lambda, \
-    cleanup_bundle, _install_dependencies_with_npm
-from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
+from gcdt.ramuda_core import cleanup_bundle
+from gcdt.ramuda_utils import unit, \
     aggregate_datapoints, json2table, create_sha256, ProgressPercentage, \
     list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, \
     get_bucket_from_s3_arn, build_filter_rules, create_sha256_urlsafe
-from gcdt.testtools.helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles, \
-    check_npm_precondition
+from gcdt_testtools.helpers import create_tempfile, get_size, temp_folder, \
+    cleanup_tempfiles, check_npm_precondition
 from . import here
 
 
 log = logging.getLogger(__name__)
-
-
-@pytest.mark.slow
-def test_get_packages_to_ignore(temp_folder, cleanup_tempfiles):
-    requirements_txt = create_tempfile('boto3\npyhocon\n')
-    # typical .ramudaignore file:
-    ramuda_ignore = create_tempfile(textwrap.dedent("""\
-        boto3*
-        botocore*
-        python-dateutil*
-        six*
-        docutils*
-        jmespath*
-        futures*
-    """))
-    # schedule the temp_files for cleanup:
-    cleanup_tempfiles.extend([requirements_txt, ramuda_ignore])
-    _install_dependencies_with_pip(requirements_txt, temp_folder[0])
-
-    packages = os.listdir(temp_folder[0])
-    log.info('packages in test folder:')
-    for package in packages:
-        log.debug(package)
-
-    matches = get_packages_to_ignore(temp_folder[0], ramuda_ignore)
-    log.info('matches in test folder:')
-    for match in sorted(matches):
-        log.debug(match)
-    assert_true('boto3/__init__.py' in matches)
-    assert_false('pyhocon' in matches)
-
-
-@pytest.mark.slow
-def test_cleanup_folder(temp_folder, cleanup_tempfiles):
-    requirements_txt = create_tempfile('boto3\npyhocon\n')
-    # typical .ramudaignore file:
-    ramuda_ignore = create_tempfile(textwrap.dedent("""\
-        boto3*
-        botocore*
-        python-dateutil*
-        six*
-        docutils*
-        jmespath*
-        futures*
-    """))
-    cleanup_tempfiles.extend([requirements_txt, ramuda_ignore])
-    log.info(_install_dependencies_with_pip(
-        here('resources/sample_lambda/requirements.txt'), temp_folder[0]))
-
-    log.debug('test folder size: %s' % get_size(temp_folder[0]))
-    cleanup_folder(temp_folder[0], ramuda_ignore)
-    log.debug('test folder size: %s' % get_size(temp_folder[0]))
-    packages = os.listdir(temp_folder[0])
-    log.debug(packages)
-    assert_not_in('boto3', packages)
-    assert_in('pyhocon', packages)
-
-
-@pytest.mark.slow
-def test_install_dependencies_with_pip(temp_folder, cleanup_tempfiles):
-    requirements_txt = create_tempfile('werkzeug\n')
-    cleanup_tempfiles.append(requirements_txt)
-    log.info(_install_dependencies_with_pip(
-        requirements_txt,
-        temp_folder[0]))
-    packages = os.listdir(temp_folder[0])
-    for package in packages:
-        log.debug(package)
-    assert_true('werkzeug' in packages)
-
-
-@pytest.mark.slow
-@check_npm_precondition
-def test_install_dependencies_with_npm(temp_folder):
-    with open('./package.json', 'w') as req:
-        req.write(textwrap.dedent("""\
-            {
-              "name": "my-sample-lambda",
-              "version": "0.0.1",
-              "description": "A very simple lambda function",
-              "main": "index.js",
-              "dependencies": {
-                "1337": "^1.0.0"
-              }
-            }"""))
-
-    log.info(_install_dependencies_with_npm())
-    packages = os.listdir(os.path.join(temp_folder[0], 'node_modules'))
-    for package in packages:
-        log.debug(package)
-    assert_true('1337' in packages)
 
 
 def test_cleanup_bundle(temp_folder):

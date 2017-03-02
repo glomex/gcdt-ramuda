@@ -9,13 +9,13 @@ from nose.tools import assert_regexp_matches
 from gcdt.ramuda_main import version_cmd, clean_cmd, list_cmd, deploy_cmd, \
     delete_cmd, metrics_cmd, ping_cmd
 
-from .helpers_aws import check_preconditions, get_tooldata
-from .helpers_aws import create_role_helper
-from .helpers_aws import awsclient, temp_bucket  # fixtures!
+from gcdt_testtools.helpers_aws import check_preconditions, get_tooldata
+from gcdt_testtools.helpers_aws import create_role_helper
+from gcdt_testtools.helpers_aws import awsclient, temp_bucket  # fixtures!
 from .test_ramuda_aws import vendored_folder, temp_lambda, cleanup_lambdas  # fixtures!
 from .test_ramuda_aws import cleanup_roles  # fixtures!
-from gcdt.testtools.helpers import temp_folder  # fixtures !
-from gcdt.testtools import helpers
+from gcdt_testtools.helpers import temp_folder  # fixtures !
+from gcdt_testtools import helpers
 
 # note: xzy_main tests have a more "integrative" character so focus is to make
 # sure that the gcdt parts fit together not functional coverage of the parts.
