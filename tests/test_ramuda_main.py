@@ -14,8 +14,8 @@ from .helpers_aws import create_role_helper
 from .helpers_aws import awsclient, temp_bucket  # fixtures!
 from .test_ramuda_aws import vendored_folder, temp_lambda, cleanup_lambdas  # fixtures!
 from .test_ramuda_aws import cleanup_roles  # fixtures!
-from .helpers import temp_folder  # fixtures !
-from . import helpers
+from gcdt.testtools.helpers import temp_folder  # fixtures !
+from gcdt.testtools import helpers
 
 # note: xzy_main tests have a more "integrative" character so focus is to make
 # sure that the gcdt parts fit together not functional coverage of the parts.

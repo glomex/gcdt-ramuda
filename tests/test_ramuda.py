@@ -20,7 +20,7 @@ from gcdt.ramuda_utils import get_packages_to_ignore, cleanup_folder, unit, \
     aggregate_datapoints, json2table, create_sha256, ProgressPercentage, \
     list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, \
     get_bucket_from_s3_arn, build_filter_rules, create_sha256_urlsafe
-from .helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles, \
+from gcdt.testtools.helpers import create_tempfile, get_size, temp_folder, cleanup_tempfiles, \
     check_npm_precondition
 from . import here
 
