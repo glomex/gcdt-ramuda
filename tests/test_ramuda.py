@@ -13,7 +13,7 @@ from nose.tools import assert_true, assert_false, assert_equal, \
     assert_regexp_matches
 import pytest
 
-from gcdt.ramuda_core import cleanup_bundle
+from gcdt.ramuda_core import cleanup_bundle, bundle_lambda
 from gcdt.ramuda_utils import unit, \
     aggregate_datapoints, json2table, create_sha256, ProgressPercentage, \
     list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, \
@@ -198,3 +198,15 @@ def test_progress_percentage(cleanup_tempfiles):
     subscriber.on_progress(bytes_transferred=10)
     assert_regexp_matches(out.getvalue().strip(),
                           '.*\.tgz  11 / 20\.0  \(55\.00%\)')
+
+
+def test_bundle_lambda(temp_folder, capsys):
+    zipfile = 'that was easy__'
+    exit_code = bundle_lambda(zipfile)
+    assert exit_code == 0
+    assert os.path.isfile('bundle.zip')
+    out, err = capsys.readouterr()
+    assert out == 'Finished - a bundle.zip is waiting for you...\n'
+
+
+

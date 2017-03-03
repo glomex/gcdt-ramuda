@@ -78,10 +78,10 @@ def deploy_cmd(**tooldata):
     timeout = int(config['lambda'].get('timeout'))
     memory_size = int(config['lambda'].get('memorySize'))
     folders_from_file = config['bundling'].get('folders')
-    prebundle_scripts = config['bundling'].get('preBundle', None)
     subnet_ids = config['lambda'].get('vpc', None).get('subnetIds', None)
     security_groups = config['lambda'].get('vpc', None).get('securityGroups', None)
     artifact_bucket = config['deployment'].get('artifactBucket', None)
+    zipfile = context['_zipfile']
     runtime = config['lambda'].get('runtime', 'python2.7')
     settings = config['lambda'].get('settings', None)
     exit_code = deploy_lambda(
@@ -91,9 +91,9 @@ def deploy_cmd(**tooldata):
         memory_size, subnet_ids=subnet_ids,
         security_groups=security_groups,
         artifact_bucket=artifact_bucket,
+        zipfile=zipfile,
         fail_deployment_on_unsuccessful_ping=
         fail_deployment_on_unsuccessful_ping,
-        prebundle_scripts=prebundle_scripts,
         runtime=runtime,
         settings=settings
     )
@@ -166,15 +166,7 @@ def unwire_cmd(**tooldata):
 @cmd(spec=['bundle'])
 def bundle_cmd(**tooldata):
     context = tooldata.get('context')
-    config = tooldata.get('config')
-    awsclient = context.get('_awsclient')
-    runtime = config['lambda'].get('runtime', 'python2.7')
-    handler_filename = config['lambda'].get('handlerFile')
-    folders_from_file = config['bundling'].get('folders')
-    prebundle_scripts = config['bundling'].get('preBundle', None)
-    settings = config['lambda'].get('settings', None)
-    return bundle_lambda(awsclient, handler_filename, folders_from_file,
-                         prebundle_scripts, runtime, settings)
+    return bundle_lambda(context['_zipfile'])
 
 
 @cmd(spec=['rollback', '<lambda>', '<version>'])

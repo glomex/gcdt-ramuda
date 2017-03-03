@@ -235,8 +235,9 @@ def deploy_lambda(awsclient, function_name, role, handler_filename,
                   handler_function,
                   folders, description, timeout, memory, subnet_ids=None,
                   security_groups=None, artifact_bucket=None,
+                  zipfile=None,
                   fail_deployment_on_unsuccessful_ping=False,
-                  prebundle_scripts=None, runtime='python2.7', settings=None):
+                  runtime='python2.7', settings=None):
     """Create or update a lambda function.
 
     :param awsclient:
@@ -251,9 +252,7 @@ def deploy_lambda(awsclient, function_name, role, handler_filename,
     :param subnet_ids:
     :param security_groups:
     :param artifact_bucket:
-    :param fail_deployment_on_unsuccessful_ping:
-    :param runtime:
-    :param settings: ramuda config settings entry
+    :param zipfile:
     :return: exit_code
     """
     if lambda_exists(awsclient, function_name):
@@ -263,14 +262,9 @@ def deploy_lambda(awsclient, function_name, role, handler_filename,
                                           description, timeout, memory,
                                           subnet_ids, security_groups,
                                           artifact_bucket=artifact_bucket,
-                                          prebundle_scripts=prebundle_scripts,
-                                          runtime=runtime,
-                                          settings=settings)
+                                          zipfile=zipfile
+                                        )
     else:
-        zipfile = _get_zipped_file(awsclient, handler_filename, folders,
-                                   prebundle_scripts=prebundle_scripts,
-                                   runtime=runtime,
-                                   settings=settings)
         if not zipfile:
             return 1
         log.info('buffer size: %0.2f MB' % float(len(zipfile) / 1000000.0))
@@ -369,12 +363,13 @@ def _update_lambda(awsclient, function_name, handler_filename,
                    handler_function, folders,
                    role, description, timeout, memory, subnet_ids=None,
                    security_groups=None, artifact_bucket=None,
-                   prebundle_scripts=None, runtime='python2.7', settings=None):
+                   zipfile=None
+                   ):
     log.debug('update lambda function: %s' % function_name)
-    _update_lambda_function_code(awsclient, function_name, handler_filename,
-                                 folders, artifact_bucket=artifact_bucket,
-                                 prebundle_scripts=prebundle_scripts,
-                                 runtime=runtime, settings=settings)
+    _update_lambda_function_code(awsclient, function_name,
+                                 artifact_bucket=artifact_bucket,
+                                 zipfile=zipfile
+    )
     function_version = \
         _update_lambda_configuration(
             awsclient, function_name, role, handler_function,
@@ -383,18 +378,13 @@ def _update_lambda(awsclient, function_name, handler_filename,
     return function_version
 
 
-def bundle_lambda(awsclient, handler_filename, folders, prebundle_scripts=None,
-                  runtime='python2.7', settings=None):
-    """Prepare a zip file for the lambda function and dependencies.
+def bundle_lambda(zipfile):
+    """Write zipfile contents to file.
 
-    :param handler_filename:
-    :param folders:
+    :param zipfile:
     :return: exit_code
     """
-
-    zipfile = _get_zipped_file(awsclient, handler_filename, folders,
-                               prebundle_scripts=prebundle_scripts,
-                               runtime=runtime, settings=settings)
+    # TODO have 'bundle.zip' as default config
     if not zipfile:
         return 1
     with open('bundle.zip', 'wb') as zfile:
@@ -404,13 +394,11 @@ def bundle_lambda(awsclient, handler_filename, folders, prebundle_scripts=None,
 
 
 def _update_lambda_function_code(
-        awsclient, function_name, handler_filename, folders,
-        artifact_bucket=None, prebundle_scripts=None, runtime='python2.7',
-        settings=None):
+        awsclient, function_name,
+        artifact_bucket=None,
+        zipfile=None
+        ):
     client_lambda = awsclient.get_client('lambda')
-    zipfile = _get_zipped_file(awsclient, handler_filename, folders,
-                               prebundle_scripts=prebundle_scripts,
-                               runtime=runtime, settings=settings)
     if not zipfile:
         return 1
     local_hash = create_sha256(zipfile)
@@ -1025,7 +1013,6 @@ def _remove_cloudwatch_rule_event(awsclient, rule_name, target_lambda_arn):
 def _remove_events_from_s3_bucket(awsclient, bucket_name, target_lambda_arn,
                                   filter_rule=False):
     client_s3 = awsclient.get_client('s3')
-    # this is pointless??
     bucket_configurations = client_s3.get_bucket_notification_configuration(
         Bucket=bucket_name)
     bucket_configurations.pop('ResponseMetadata')
