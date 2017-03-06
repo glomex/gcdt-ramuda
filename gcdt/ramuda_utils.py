@@ -3,17 +3,11 @@ from __future__ import unicode_literals, print_function
 import os
 import base64
 import hashlib
-import io
-import shutil
 import sys
 import threading
 import time
-from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 import logging
 
-import pathspec
-import warnings
-from clint.textui import colored
 from s3transfer import S3Transfer
 from tabulate import tabulate
 
@@ -21,92 +15,6 @@ from . import utils
 
 
 log = logging.getLogger(__name__)
-
-
-def files_to_zip(path):
-    for root, dirs, files in os.walk(path):
-        for f in files:
-            full_path = os.path.join(root, f)
-            archive_name = full_path[len(path) + len(os.sep):]
-            # print 'full_path, archive_name' + full_path, archive_name
-            yield full_path, archive_name
-
-
-def make_zip_file_bytes(awsclient, paths, handler, settings=None):
-    """Create the bundle zip file.
-
-    :param awsclient:
-    :param paths:
-    :param handler:
-    :param settings: ramuda config settings entry
-    :return: exit_code
-    """
-    log.debug('creating zip file...')
-    buf = io.BytesIO()
-    """
-    folders = [
-        { source = './vendored', target = '.' },
-        { source = './impl', target = '.' }
-    ]
-    as ConfigTree:
-    [ConfigTree([('source', './vendored'), ('target', '.')]),
-     ConfigTree([('source', './impl'), ('target', './impl')])]
-    """
-    # automatically add vendored directory
-    vendored = {}
-    # check if ./vendored folder is contained!
-    vendored_missing = True
-    for p in paths:
-        if p['source'] == './vendored':
-            vendored_missing = False
-            break
-    if vendored_missing:
-        # add missing ./vendored folder to paths
-        vendored['source'] = './vendored'
-        vendored['target'] = '.'
-        paths.append(vendored)
-    cleanup_folder('./vendored')  # TODO this should be replaced by better glob!
-    # TODO: also exclude *.pyc
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        with ZipFile(buf, 'w', ZIP_DEFLATED) as z:
-            z.debug = 0
-            for path in paths:
-                path_to_zip = path.get('source')
-                target = path.get('target', path_to_zip)
-                # print 'path to zip ' + path_to_zip
-                # print 'target is ' + target
-                for full_path, archive_name in files_to_zip(path=path_to_zip):
-                    # print 'full_path ' + full_path
-                    archive_target = target + '/' + archive_name
-                    # print 'archive target ' + archive_target
-                    z.write(full_path, archive_target)
-
-            # add settings file
-            #if 'settings' in config and config['settings']:
-            if settings:
-                # give settings.conf -rw-r--r-- permissions
-                # TODO allow json files for non-hocon setups
-                settings_file = ZipInfo('settings.conf')
-                settings_file.external_attr = 0644 << 16L
-                z.writestr(settings_file, settings)
-            z.write(handler, os.path.basename(handler))
-
-    return buf.getvalue()
-
-
-def check_buffer_exceeds_limit(buf):
-    """Check if size is bigger than 50MB.
-
-    :return: True/False returns True if bigger than 50MB.
-    """
-    buffer_mbytes = float(len(buf) / 1000000.0)
-    log.debug('buffer has size %0.2f MB' % buffer_mbytes)
-    if buffer_mbytes >= 50.0:
-        log.error('Deployment bundles must not be bigger than 50MB')
-        log.error('See http://docs.aws.amazon.com/lambda/latest/dg/limits.html')
-        return True
-    return False
 
 
 def lambda_exists(awsclient, lambda_name):
@@ -226,49 +134,6 @@ def build_filter_rules(prefix, suffix):
             }
         )
     return filter_rules
-
-
-def get_packages_to_ignore(folder, ramuda_ignore_file):
-    if not ramuda_ignore_file:
-        ramuda_ignore_file = os.path.expanduser('~') + '/' + '.ramudaignore'
-    # we try to read ignore patterns from the standard .ramudaignore file
-    # if we can't find one we don't ignore anything
-    # from https://pypi.python.org/pypi/pathspec
-    try:
-        with open(ramuda_ignore_file, 'r') as fh:
-            spec = pathspec.PathSpec.from_lines(pathspec.GitIgnorePattern, fh)
-
-        matches = []
-        for match in spec.match_tree(folder):
-            matches.append(match)
-        return matches
-    except IOError:
-        print(colored.yellow('Warning: ') + 'No such file: %s' %
-              ramuda_ignore_file)
-        return []
-    except Exception as e:
-        print(e)
-        return []
-
-
-def cleanup_folder(path, ramuda_ignore_file=None):
-    # this cleans up the ./vendored (path) folder
-    # exclude locally installed gcdt_develop from lambda container
-    # print('path: %s' % path)
-    matches = get_packages_to_ignore(path, ramuda_ignore_file)
-    result_set = set()
-    for package in matches:
-        split_dir = package.split('/')[0]
-        result_set.add(split_dir)
-        # print ('added %s to result set' % split_dir)
-    for folder in result_set:
-        obj = path + '/' + folder
-        if os.path.isdir(obj):
-            print('deleting directory %s' % obj)
-            shutil.rmtree(path + '/' + folder, ignore_errors=False)
-        else:
-            # print ('deleting file %s') % object
-            os.remove(path + '/' + folder)
 
 
 class ProgressPercentage(object):

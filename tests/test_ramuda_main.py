@@ -7,15 +7,16 @@ import pytest
 from nose.tools import assert_regexp_matches
 
 from gcdt.ramuda_main import version_cmd, clean_cmd, list_cmd, deploy_cmd, \
-    delete_cmd, metrics_cmd, ping_cmd
+    delete_cmd, metrics_cmd, ping_cmd, bundle_cmd
+from gcdt_plugins.bundler.bundler import bundle
 
-from .helpers_aws import check_preconditions, get_tooldata
-from .helpers_aws import create_role_helper
-from .helpers_aws import awsclient, temp_bucket  # fixtures!
+from gcdt_testtools.helpers_aws import check_preconditions, get_tooldata
+from gcdt_testtools.helpers_aws import create_role_helper
+from gcdt_testtools.helpers_aws import awsclient, temp_bucket  # fixtures!
 from .test_ramuda_aws import vendored_folder, temp_lambda, cleanup_lambdas  # fixtures!
 from .test_ramuda_aws import cleanup_roles  # fixtures!
-from .helpers import temp_folder  # fixtures !
-from . import helpers
+from gcdt_testtools.helpers import temp_folder  # fixtures !
+from gcdt_testtools import helpers
 
 # note: xzy_main tests have a more "integrative" character so focus is to make
 # sure that the gcdt parts fit together not functional coverage of the parts.
@@ -137,6 +138,8 @@ def test_deploy_delete_cmds(awsclient, vendored_folder, cleanup_roles,
     }
 
     tooldata = get_tooldata(awsclient, 'ramuda', 'deploy', config=config)
+
+    bundle((tooldata['context'], {'ramuda': tooldata['config']}))
     deploy_cmd(**tooldata)
 
     # now we use the delete cmd to remove the lambda function
@@ -167,3 +170,12 @@ def test_ping_cmd(awsclient, vendored_folder, temp_lambda, capsys):
     ping_cmd(lambda_name, **tooldata)
     out, err = capsys.readouterr()
     assert '"alive"' in out
+
+
+def test_bundle_cmd(capsys, temp_folder):
+    tooldata = {
+        'context': {'_zipfile': 'some_file'}
+    }
+    bundle_cmd(**tooldata)
+    out, err = capsys.readouterr()
+    assert out == 'Finished - a bundle.zip is waiting for you...\n'

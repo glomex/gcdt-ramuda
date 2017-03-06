@@ -6,22 +6,24 @@ import time
 import logging
 
 import pytest
-from nose.tools import assert_equal, assert_greater_equal, assert_less, \
-    assert_in, assert_not_in, assert_regexp_matches, assert_true
+from nose.tools import assert_equal, assert_greater_equal, \
+    assert_in, assert_not_in, assert_regexp_matches
+from gcdt_plugins.bundler.bundler import _get_zipped_file
 
 from gcdt.ramuda_core import delete_lambda, deploy_lambda, ping, \
     _lambda_add_time_schedule_event_source, \
     wire, unwire, _lambda_add_invoke_permission, list_functions, \
     _update_lambda_configuration, get_metrics, rollback, _get_alias_version, \
-    bundle_lambda, info
+    info
 from gcdt.ramuda_utils import list_lambda_versions
-from . import helpers, here
-from .helpers import check_npm_precondition
-from .helpers_aws import create_role_helper, delete_role_helper, \
+from gcdt_testtools import helpers
+from gcdt_testtools.helpers import check_npm_precondition
+from gcdt_testtools.helpers_aws import create_role_helper, delete_role_helper, \
     create_lambda_helper, create_lambda_role_helper, check_preconditions, \
     settings_requirements
-from .helpers_aws import temp_bucket, awsclient  # fixtures!
-from .helpers import cleanup_tempfiles, temp_folder  # fixtures!
+from gcdt_testtools.helpers_aws import temp_bucket, awsclient  # fixtures!
+from gcdt_testtools.helpers import cleanup_tempfiles, temp_folder  # fixtures!
+from . import here
 
 
 log = logging.getLogger(__name__)
@@ -181,6 +183,11 @@ def test_create_lambda(awsclient, vendored_folder, cleanup_lambdas,
     region = config['deployment'].get('region')
     artifact_bucket = config['deployment'].get('artifactBucket', None)
 
+    zipfile = _get_zipped_file(
+        handler_filename,
+        folders_from_file,
+        )
+
     deploy_lambda(
         awsclient=awsclient,
         function_name=lambda_name,
@@ -191,7 +198,8 @@ def test_create_lambda(awsclient, vendored_folder, cleanup_lambdas,
         description=lambda_description,
         timeout=timeout,
         memory=memory_size,
-        artifact_bucket=artifact_bucket
+        artifact_bucket=artifact_bucket,
+        zipfile=zipfile
     )
     # TODO improve this (by using a waiter??)
     cleanup_lambdas.append(lambda_name)
@@ -294,6 +302,12 @@ def test_create_lambda_nodejs(awsclient, temp_folder, cleanup_lambdas,
     region = config['deployment'].get('region')
     artifact_bucket = config['deployment'].get('artifactBucket', None)
 
+    zipfile = _get_zipped_file(
+        handler_filename,
+        folders_from_file,
+        runtime=runtime,
+    )
+
     deploy_lambda(
         awsclient=awsclient,
         function_name=lambda_name,
@@ -305,6 +319,7 @@ def test_create_lambda_nodejs(awsclient, temp_folder, cleanup_lambdas,
         timeout=timeout,
         memory=memory_size,
         artifact_bucket=artifact_bucket,
+        zipfile=zipfile,
         runtime=runtime
     )
     # TODO improve this (by using a waiter??)
@@ -402,6 +417,11 @@ def test_create_lambda_with_s3(awsclient, vendored_folder, cleanup_lambdas,
     region = config['deployment'].get('region')
     artifact_bucket = config['deployment'].get('artifactBucket', None)
 
+    zipfile = _get_zipped_file(#awsclient,
+        handler_filename,
+        folders_from_file,
+    )
+
     deploy_lambda(
         awsclient=awsclient,
         function_name=lambda_name,
@@ -412,7 +432,8 @@ def test_create_lambda_with_s3(awsclient, vendored_folder, cleanup_lambdas,
         description=lambda_description,
         timeout=timeout,
         memory=memory_size,
-        artifact_bucket=artifact_bucket
+        artifact_bucket=artifact_bucket,
+        zipfile=zipfile
     )
     cleanup_lambdas.append(lambda_name)
 
@@ -507,7 +528,6 @@ def test_schedule_event_source(awsclient, vendored_folder, cleanup_lambdas,
 
     # lookup lambda arn
     lambda_client = awsclient.get_client('lambda')
-    # lambda_function = lambda_client.get_function(FunctionName=function_name)
     alias_name = 'ACTIVE'
     lambda_arn = lambda_client.get_alias(FunctionName=lambda_name,
                                          Name=alias_name)['AliasArn']
@@ -773,131 +793,6 @@ def test_ping(awsclient, vendored_folder, temp_lambda):
     # test has no ping
     response = ping(awsclient, lambda_name)
     assert response == '{"ramuda_action": "ping"}'
-
-
-@pytest.mark.aws
-@check_preconditions
-def test_prebundle(awsclient, temp_folder, cleanup_lambdas, cleanup_roles):
-    log.info('running test_prebundle')
-
-    temp_string = helpers.random_string()
-    lambda_name = 'jenkins_test_%s' % temp_string
-    role_name = 'unittest_%s_lambda' % temp_string
-    role_arn = create_lambda_role_helper(awsclient, role_name)
-    cleanup_roles.append(role_name)
-
-    # TODO: add this to collection "how not to use lambda"
-    #script = lambda r: here(
-    #    'resources/sample_lambda_with_prebundle/{}.sh'.format(r))
-    def _script(name):
-        return here('resources/sample_lambda_with_prebundle/%s.sh' % name)
-
-    config = {
-        "lambda": {
-            "handlerFunction": "handler.handle",
-            "handlerFile": "handler.py",
-            "description": "Test lambda with prebundle",
-            "timeout": 300,
-            "memorySize": 128
-        },
-        "bundling": {
-            "preBundle": [
-                _script('create_requirements'),
-                _script('create_handler'),
-                _script('create_settings')
-            ],
-            "folders": [
-                {
-                    "source": "./vendored",
-                    "target": "."
-                }
-            ]
-        }
-    }
-
-    deploy_lambda(
-        awsclient=awsclient,
-        role=role_arn,
-        function_name=lambda_name,
-        handler_filename=config['lambda'].get('handlerFile'),
-        handler_function=config['lambda'].get('handlerFunction'),
-        description=config['lambda'].get('description'),
-        timeout=config['lambda'].get('timeout'),
-        memory=config['lambda'].get('memorySize'),
-        folders=config['bundling'].get('folders'),
-        prebundle_scripts=config['bundling'].get('preBundle')
-    )
-    cleanup_lambdas.append(lambda_name)
-
-    response = ping(awsclient, lambda_name)
-    assert response == '"alive"'
-
-
-@pytest.mark.aws
-@check_preconditions
-def test_bundle_lambda(temp_folder, awsclient):
-    folders_from_file = [
-        {'source': './vendored', 'target': '.'},
-        {'source': './impl', 'target': 'impl'}
-    ]
-    prebundle_scripts = [
-        here('resources/sample_lambda_with_prebundle/sample_script.sh')]
-    os.environ['ENV'] = 'DEV'
-    os.mkdir('./vendored')
-    os.mkdir('./impl')
-    with open('./requirements.txt', 'w') as req:
-        req.write('pyhocon\n')
-    with open('./handler.py', 'w') as req:
-        req.write('# this is my lambda handler\n')
-    with open('./settings_dev.conf', 'w') as req:
-        req.write('\n')
-    # write 1MB file -> this gets us a zip file that is within the 50MB limit
-    with open('./impl/bigfile', 'wb') as bigfile:
-        print(bigfile.name)
-        bigfile.write(os.urandom(1000000))  # 1 MB
-    exit_code = bundle_lambda(awsclient, './handler.py', folders_from_file,
-                              prebundle_scripts)
-    assert exit_code == 0
-
-    assert_true(os.path.isfile('test_ramuda_prebundle.txt'))
-
-    zipped_size = os.path.getsize('bundle.zip')
-    unzipped_size = get_size('vendored') + get_size('impl') + os.path.getsize(
-        'handler.py')
-    assert_less(zipped_size, unzipped_size)
-
-
-@pytest.mark.slow
-@pytest.mark.aws
-@check_preconditions
-def test_bundle_lambda_exceeds_limit(awsclient, temp_folder):
-    folders_from_file = [
-        {'source': './vendored', 'target': '.'},
-        {'source': './impl', 'target': 'impl'}
-    ]
-    os.environ['ENV'] = 'DEV'
-
-    os.mkdir('./vendored')
-    os.mkdir('./impl')
-    with open('./requirements.txt', 'w') as req:
-        req.write('pyhocon\n')
-    with open('./handler.py', 'w') as req:
-        req.write('# this is my lambda handler\n')
-    with open('./settings_dev.conf', 'w') as req:
-        req.write('\n')
-    # write 51MB file -> this gets us a zip file that exceeds the 50MB limit
-    with open('./impl/bigfile', 'wb') as bigfile:
-        #print(bigfile.name)
-        bigfile.write(os.urandom(51100000))  # 51 MB
-
-    exit_code = bundle_lambda(awsclient, './handler.py', folders_from_file)
-    assert exit_code == 1
-    # TODO add proper log capture that works!
-    #records = caplog.records()
-    #assert records[0].levelname == 'ERROR'
-    #assert records[0].message == 'Deployment bundles must not be bigger than 50MB'
-    #assert records[1].levelname == 'ERROR'
-    #assert records[1].message == 'See http://docs.aws.amazon.com/lambda/latest/dg/limits.html'
 
 
 @pytest.mark.aws
