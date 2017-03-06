@@ -139,7 +139,7 @@ def test_deploy_delete_cmds(awsclient, vendored_folder, cleanup_roles,
 
     tooldata = get_tooldata(awsclient, 'ramuda', 'deploy', config=config)
 
-    bundle((tooldata['context'], tooldata['config']))
+    bundle((tooldata['context'], {'ramuda': tooldata['config']}))
     deploy_cmd(**tooldata)
 
     # now we use the delete cmd to remove the lambda function
