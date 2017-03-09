@@ -178,8 +178,8 @@ def test_create_lambda(awsclient, vendored_folder, cleanup_lambdas,
     memory_size = int(config['lambda'].get('memorySize'))
     zip_name = config['bundling'].get('zip')
     folders_from_file = config['bundling'].get('folders')
-    subnet_ids = config['lambda'].get('vpc', None).get('subnetIds', None)
-    security_groups = config['lambda'].get('vpc', None).get('securityGroups', None)
+    subnet_ids = config['lambda'].get('vpc', {}).get('subnetIds', None)
+    security_groups = config['lambda'].get('vpc', {}).get('securityGroups', None)
     region = config['deployment'].get('region')
     artifact_bucket = config['deployment'].get('artifactBucket', None)
 
@@ -297,8 +297,8 @@ def test_create_lambda_nodejs(awsclient, temp_folder, cleanup_lambdas,
     memory_size = int(config['lambda'].get('memorySize'))
     zip_name = config['bundling'].get('zip')
     folders_from_file = config['bundling'].get('folders')
-    subnet_ids = config['lambda'].get('vpc', None).get('subnetIds', None)
-    security_groups = config['lambda'].get('vpc', None).get('securityGroups', None)
+    subnet_ids = config['lambda'].get('vpc', {}).get('subnetIds', None)
+    security_groups = config['lambda'].get('vpc', {}).get('securityGroups', None)
     region = config['deployment'].get('region')
     artifact_bucket = config['deployment'].get('artifactBucket', None)
 
@@ -412,12 +412,12 @@ def test_create_lambda_with_s3(awsclient, vendored_folder, cleanup_lambdas,
     memory_size = int(config['lambda'].get('memorySize'))
     zip_name = config['bundling'].get('zip')
     folders_from_file = config['bundling'].get('folders')
-    subnet_ids = config['lambda'].get('vpc', None).get('subnetIds', None)
-    security_groups = config['lambda'].get('vpc', None).get('securityGroups', None)
+    subnet_ids = config['lambda'].get('vpc', {}).get('subnetIds', None)
+    security_groups = config['lambda'].get('vpc', {}).get('securityGroups', None)
     region = config['deployment'].get('region')
     artifact_bucket = config['deployment'].get('artifactBucket', None)
 
-    zipfile = _get_zipped_file(#awsclient,
+    zipfile = _get_zipped_file(
         handler_filename,
         folders_from_file,
     )

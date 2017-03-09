@@ -207,7 +207,7 @@ def _lambda_add_s3_event_source(awsclient, arn, event, bucket, prefix,
         Bucket=bucket,
         NotificationConfiguration=bucket_configurations
     )
-
+    # TODO don't return a table, but success state
     return json2table(response)
 
 
