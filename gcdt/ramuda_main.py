@@ -78,8 +78,8 @@ def deploy_cmd(**tooldata):
     timeout = int(config['lambda'].get('timeout'))
     memory_size = int(config['lambda'].get('memorySize'))
     folders_from_file = config['bundling'].get('folders')
-    subnet_ids = config['lambda'].get('vpc', None).get('subnetIds', None)
-    security_groups = config['lambda'].get('vpc', None).get('securityGroups', None)
+    subnet_ids = config['lambda'].get('vpc', {}).get('subnetIds', None)
+    security_groups = config['lambda'].get('vpc', {}).get('securityGroups', None)
     artifact_bucket = config['deployment'].get('artifactBucket', None)
     zipfile = context['_zipfile']
     runtime = config['lambda'].get('runtime', 'python2.7')
