@@ -78,8 +78,8 @@ def _get_alias_version(awsclient, function_name, alias_name):
         return
 
 
-def _get_version_from_response(func):
-    version = func['Version']
+def _get_version_from_response(data):
+    version = data['Version']
     return int(version) if version.isdigit() else 0
 
 
@@ -279,7 +279,7 @@ def deploy_lambda(awsclient, function_name, role, handler_filename,
         print(colored.green('Great you\'re already accepting a ping ' +
                             'in your Lambda function'))
     elif fail_deployment_on_unsuccessful_ping and not 'alive' in pong:
-        print(colored.green('Pinging your lambda function failed'))
+        print(colored.red('Pinging your lambda function failed'))
         # we do not deploy alias and fail command
         return 1
     else:
