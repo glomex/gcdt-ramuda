@@ -8,7 +8,7 @@ from nose.tools import assert_regexp_matches
 
 from gcdt.ramuda_main import version_cmd, clean_cmd, list_cmd, deploy_cmd, \
     delete_cmd, metrics_cmd, ping_cmd, bundle_cmd
-from gcdt_plugins.bundler.bundler import bundle
+from gcdt_bundler.bundler import bundle
 
 from gcdt_testtools.helpers_aws import check_preconditions, get_tooldata
 from gcdt_testtools.helpers_aws import create_role_helper

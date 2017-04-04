@@ -8,7 +8,7 @@ import logging
 import pytest
 from nose.tools import assert_equal, assert_greater_equal, \
     assert_in, assert_not_in, assert_regexp_matches
-from gcdt_plugins.bundler.bundler import _get_zipped_file
+from gcdt_bundler.bundler import _get_zipped_file
 
 from gcdt.ramuda_core import delete_lambda, deploy_lambda, ping, \
     _lambda_add_time_schedule_event_source, \
