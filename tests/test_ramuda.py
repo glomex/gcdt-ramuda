@@ -16,16 +16,18 @@ import pytest
 import mock
 import maya
 
-from gcdt.ramuda_core import cleanup_bundle, bundle_lambda
-from gcdt.ramuda_utils import unit, \
-    aggregate_datapoints, create_sha256, ProgressPercentage, \
-    list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, \
-    get_bucket_from_s3_arn, build_filter_rules, create_sha256_urlsafe, \
-    check_and_format_logs_params
 from gcdt.utils import json2table
 from gcdt_testtools.helpers import create_tempfile, get_size, temp_folder, \
     cleanup_tempfiles
 from gcdt_testtools.helpers import logcapture  # fixtures!
+
+from gcdt_ramuda.ramuda_core import cleanup_bundle, bundle_lambda
+from gcdt_ramuda.ramuda_utils import aggregate_datapoints, \
+    create_sha256, ProgressPercentage, \
+    list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, \
+    get_bucket_from_s3_arn, build_filter_rules, create_sha256_urlsafe, \
+    check_and_format_logs_params
+
 from . import here
 
 
@@ -46,9 +48,9 @@ def test_cleanup_bundle(temp_folder):
         assert not os.path.exists(path)
 
 
-def test_unit():
-    assert unit('Duration') == 'Milliseconds'
-    assert unit('Else') == 'Count'
+#def test_unit():
+#    assert unit('Duration') == 'Milliseconds'
+#    assert unit('Else') == 'Count'
 
 
 def test_aggregate_datapoints():

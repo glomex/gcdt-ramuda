@@ -1,0 +1,227 @@
+swagger: '2.0'
+info:
+  title: gcdt-ramuda
+  description: Configuration for ramuda (a gcdt tool)
+  version: 0.2.0
+
+paths:
+  /test:
+    get:
+      responses:
+        "200":
+          description:  success
+
+definitions:
+  ramuda:
+    type: object
+    properties:
+      bundling:
+        $ref: '#/definitions/bundling'
+      lambda:
+        $ref: '#/definitions/lambda'
+      defaults:
+        $ref: '#/definitions/defaults'
+    required:
+    #- bundling
+    #- lambda
+    - defaults
+    additionalProperties: false
+
+  bundling:
+    type: object
+    properties:
+      folders:
+        $ref: '#/definitions/folders'
+      zip:
+        type: string
+        example: bundle.zip
+    required:
+    - folders
+    - zip
+    additionalProperties: false
+
+  lambda:
+    type: object
+    properties:
+      description:
+        type: string
+        example: Lambda function for playlist-autoselection-service
+      events:
+        $ref: '#/definitions/events'
+      handlerFile:
+        type: string
+        example: lambda.js
+      handlerFunction:
+        type: string
+        example: lambda.handler
+      memorySize:
+        type: string
+        example: '128'
+      name:
+        type: string
+        example: mes-playlist-autoselection-service
+      role:
+        $ref: '#/definitions/arn'
+        example: arn:aws:iam::979514658570:role/mes-playlist-autoselectio-role-1LY3BGOZ3CZPQ
+      runtime:
+        $ref: '#/definitions/runtime'
+        example: nodejs6.10
+      timeout:
+        type: string
+        example: '15'
+      vpc:
+        $ref: '#/definitions/vpc'
+    required:
+    - description
+    #- events
+    - handlerFile
+    - handlerFunction
+    #- memorySize
+    - name
+    - role
+    #- runtime
+    #- timeout
+    - vpc
+    additionalProperties: false
+
+  defaults:
+    type: object
+    description: 'Default properties to finetune gcdt tool lifecycle (override at own risk).'
+    properties:
+      non_config_commands:
+        type: array
+        description: 'ramuda commands that do not require a config file.'
+        default: ['logs', 'invoke']
+        items:
+          type: string
+      validate:
+        type: boolean
+        description: 'validate the tool configuration against openapi spec.'
+        default: true
+      settings_file:
+        type: string
+        description: 'filename of the settings file (incl. extension).'
+        default: 'settings.json'
+      runtime:
+        type: runtime
+        $ref: '#/definitions/runtime'
+      python_bundle_venv_dir:
+        type: string
+        description: 'relative path the bundler uses for its virtualenv'
+        default: '.gcdt/venv'
+      keep:
+        type: boolean
+        description: 'keep the virtualenv for '
+        default: false
+    required:
+    - non_config_commands
+    - validate
+    - settings_file
+    - runtime
+    - python_bundle_venv_dir
+    - keep
+    additionalProperties: false
+
+  folders:
+    type: array
+    items:
+      $ref: '#/definitions/foldersItem'
+
+  foldersItem:
+    type: object
+    properties:
+      source:
+        type: string
+        example: ./node_modules
+      target:
+        type: string
+        example: ./node_modules
+    required:
+    - source
+    - target
+    additionalProperties: false
+
+  events:
+    #oneOf:
+    #- $ref: '#/definitions/eventsObject'
+    $ref: '#/definitions/eventsArray'
+
+  #eventsObject:
+  #  type: object
+  #  items:
+  #    type: string
+  #    example: todo
+
+  eventsArray:
+    type: array
+    items:
+      $ref: '#/definitions/eventsArrayItem'
+
+  eventsArrayItem:
+    type: object
+    properties:
+      event_source:
+        #oneOf:
+        #- $ref: '#/definitions/eventsArrayItemEvent'
+        $ref: '#/definitions/eventsArrayItemSchedule'
+    required:
+    - event_source
+
+  eventsArrayItemEvent:
+    type: object
+    properties:
+      arn:
+        type: string
+        example: arn:aws:s3:::my-bucket
+      events:
+        type: array
+        items:
+          type: string
+          example: "s3:ObjectCreated:*"
+    required:
+    - arn
+    - events
+
+  eventsArrayItemSchedule:
+    type: object
+    properties:
+      name:
+        type: string
+        example: send_reminder_to_slack
+      schedule:
+        type: string
+        example: rate(1 minute)
+    required:
+    - name
+    - schedule
+
+  vpc:
+    type: object
+    properties:
+      securityGroups:
+        $ref: '#/definitions/events'
+      subnetIds:
+        $ref: '#/definitions/events'
+    required:
+    - securityGroups
+    - subnetIds
+    additionalProperties: false
+
+  top:
+    type: object
+    properties:
+      ramuda:
+        $ref: '#/definitions/ramuda'
+
+  arn:
+    type: string
+    pattern: "arn:aws:([a-zA-Z0-9-])+:([a-z]{2}-[a-z]+-\\d{1})?:(\\d{12})?:(.*)"
+
+  runtime:
+    type: string
+    enum:
+    - nodejs4.3
+    - nodejs6.10
+    - python2.7
+    - python3.6
+    default: python2.6

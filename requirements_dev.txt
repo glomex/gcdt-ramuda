@@ -1,0 +1,9 @@
+# this file contains additional dependencies
+# please list all dependencies necessary to test and build this package
+
+# test-tools
+
+# build-tools
+
+# misc
+gcdt-bundler

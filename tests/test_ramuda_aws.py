@@ -11,20 +11,22 @@ from gcdt_bundler.bundler import get_zipped_file
 from nose.tools import assert_equal, assert_in, assert_not_in
 
 from gcdt import utils
-from gcdt.ramuda_core import delete_lambda_deprecated, delete_lambda, \
-    deploy_lambda, ping, list_functions,  _update_lambda_configuration, \
-    get_metrics, rollback, _get_alias_version, info, invoke
-from gcdt.ramuda_wire import _lambda_add_invoke_permission
-from gcdt.ramuda_utils import list_lambda_versions, create_sha256, \
-    get_remote_code_hash
 from gcdt_testtools.helpers_aws import create_role_helper, delete_role_helper, \
-    create_lambda_helper, create_lambda_role_helper, check_preconditions, \
-    settings_requirements, check_normal_mode
+    create_lambda_role_helper, check_preconditions, \
+    check_normal_mode
 from gcdt_testtools.helpers_aws import temp_bucket, awsclient, \
     cleanup_roles  # fixtures!
 from gcdt_testtools.helpers import cleanup_tempfiles, temp_folder  # fixtures!
 from gcdt_testtools.helpers import create_tempfile, logcapture  # fixtures!
+
+from gcdt_ramuda.ramuda_core import delete_lambda_deprecated, delete_lambda, \
+    deploy_lambda, ping, list_functions,  _update_lambda_configuration, \
+    get_metrics, rollback, _get_alias_version, info, invoke
+from gcdt_ramuda.ramuda_wire import _lambda_add_invoke_permission
+from gcdt_ramuda.ramuda_utils import list_lambda_versions, create_sha256, \
+    get_remote_code_hash
 from . import here
+from .helpers_aws import create_lambda_helper, settings_requirements
 
 log = logging.getLogger(__name__)
 
@@ -533,10 +535,10 @@ def test_get_metrics(awsclient, vendored_folder, temp_lambda, logcapture):
     get_metrics(awsclient, temp_lambda[0])
     logcapture.check(
         ('tests.test_ramuda_aws', 'INFO', u'running test_get_metrics'),
-        ('gcdt.ramuda_core', 'INFO', u'\tDuration 0'),
-        ('gcdt.ramuda_core', 'INFO', u'\tErrors 0'),
-        ('gcdt.ramuda_core', 'INFO', u'\tInvocations 1'),
-        ('gcdt.ramuda_core', 'INFO', u'\tThrottles 0')
+        ('gcdt_ramuda.ramuda_core', 'INFO', u'\tDuration 0'),
+        ('gcdt_ramuda.ramuda_core', 'INFO', u'\tErrors 0'),
+        ('gcdt_ramuda.ramuda_core', 'INFO', u'\tInvocations 1'),
+        ('gcdt_ramuda.ramuda_core', 'INFO', u'\tThrottles 0')
     )
 
 

@@ -1,0 +1,4 @@
+# Dependencies have to be in sync with other packages (gcdt, glomex-credstash)
+gcdt>=0.2.0
+
+# Other dependencies

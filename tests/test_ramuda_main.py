@@ -8,10 +8,6 @@ from tempfile import NamedTemporaryFile
 import pytest
 
 from gcdt import utils
-from gcdt.ramuda_main import version_cmd, clean_cmd, list_cmd, deploy_cmd, \
-    delete_cmd, metrics_cmd, ping_cmd, bundle_cmd, invoke_cmd, logs_cmd
-from gcdt_bundler.bundler import bundle
-
 from gcdt_testtools.helpers_aws import check_preconditions, get_tooldata, \
     create_role_helper
 from gcdt_testtools.helpers_aws import cleanup_roles  # fixtures!
@@ -19,6 +15,12 @@ from gcdt_testtools.helpers_aws import awsclient, temp_bucket  # fixtures!
 from .test_ramuda_aws import vendored_folder, temp_lambda, cleanup_lambdas_deprecated  # fixtures!
 from gcdt_testtools.helpers import temp_folder, logcapture  # fixtures !
 from gcdt_testtools import helpers
+from gcdt_bundler.bundler import bundle
+
+from gcdt_ramuda.ramuda_main import version_cmd, clean_cmd, list_cmd, deploy_cmd, \
+    delete_cmd, metrics_cmd, ping_cmd, bundle_cmd, invoke_cmd, logs_cmd
+from gcdt_ramuda.plugin import incept_defaults
+
 
 # note: xzy_main tests have a more "integrative" character so focus is to make
 # sure that the gcdt parts fit together not functional coverage of the parts.
@@ -147,6 +149,9 @@ def test_deploy_delete_cmds(awsclient, vendored_folder, cleanup_roles,
 
     tooldata = get_tooldata(awsclient, 'ramuda', 'deploy', config=config)
     tooldata['context']['_arguments'] = {'--keep': False}
+    context = {'tool': 'ramuda'}
+    # TODO
+    incept_defaults((context, config))
 
     bundle((tooldata['context'], {'ramuda': tooldata['config']}))
     deploy_cmd(False, **tooldata)
@@ -168,10 +173,10 @@ def test_metrics_cmd(awsclient, vendored_folder, temp_lambda, logcapture):
 
     logcapture.check(
         ('tests.test_ramuda_main', 'INFO', u'running test_metrics_cmd'),
-        ('gcdt.ramuda_core', 'INFO', u'\tDuration 0'),
-        ('gcdt.ramuda_core', 'INFO', u'\tErrors 0'),
-        ('gcdt.ramuda_core', 'INFO', u'\tInvocations 0'),
-        ('gcdt.ramuda_core', 'INFO', u'\tThrottles 0')
+        ('gcdt_ramuda.ramuda_core', 'INFO', u'\tDuration 0'),
+        ('gcdt_ramuda.ramuda_core', 'INFO', u'\tErrors 0'),
+        ('gcdt_ramuda.ramuda_core', 'INFO', u'\tInvocations 0'),
+        ('gcdt_ramuda.ramuda_core', 'INFO', u'\tThrottles 0')
     )
 
 
@@ -186,7 +191,7 @@ def test_ping_cmd(awsclient, vendored_folder, temp_lambda, logcapture):
     ping_cmd(lambda_name, **tooldata)
     logcapture.check(
         ('tests.test_ramuda_main', 'INFO', u'running test_ping_cmd'),
-        ('gcdt.ramuda_main', 'INFO', u'Cool, your lambda function did respond to ping with "alive".')
+        ('gcdt_ramuda.ramuda_main', 'INFO', u'Cool, your lambda function did respond to ping with "alive".')
     )
 
 
@@ -215,7 +220,7 @@ def test_bundle_cmd(temp_folder, logcapture):
     tooldata['context']['_arguments'] = {'--keep': False}
     bundle_cmd(False, **tooldata)
     logcapture.check(
-        ('gcdt.ramuda_core', 'INFO', 'Finished - a bundle.zip is waiting for you...')
+        ('gcdt_ramuda.ramuda_core', 'INFO', 'Finished - a bundle.zip is waiting for you...')
     )
 
 
