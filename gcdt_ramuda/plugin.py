@@ -4,7 +4,8 @@ from copy import deepcopy
 
 from gcdt.utils import dict_merge
 from gcdt import gcdt_signals
-from gcdt.gcdt_openapi import get_openapi_defaults, validate_tool_config
+from gcdt.gcdt_openapi import get_openapi_defaults, validate_tool_config, \
+    incept_defaults_helper, validate_config_helper
 from . import read_openapi
 
 
@@ -17,18 +18,7 @@ def incept_defaults(params):
     :param params: context, config (context - the _awsclient, etc..
                    config - The stack details, etc..)
     """
-    context, config = params
-    # we need the defaults in all cases (especially if we do not have a config file)
-    defaults = get_openapi_defaults(read_openapi(), 'ramuda')
-    if defaults:
-        config_from_reader = deepcopy(config)
-        if context['tool'] == 'ramuda':
-            dict_merge(config, {'ramuda': defaults})
-        else:
-            # incept only 'defaults' section
-            dict_merge(config, {'ramuda': {'defaults': defaults['defaults']}})
-
-        dict_merge(config, config_from_reader)
+    incept_defaults_helper(params, read_openapi(), 'ramuda')
 
 
 def validate_config(params):
@@ -36,11 +26,7 @@ def validate_config(params):
     :param params: context, config (context - the _awsclient, etc..
                    config - The stack details, etc..)
     """
-    context, config = params
-    if config.get('defaults', {}).get('validate', True) and 'ramuda' in config:
-        error = validate_tool_config(read_openapi(), config)
-        if error:
-            context['error'] = error
+    validate_config_helper(params, read_openapi(), 'ramuda')
 
 
 def register():

@@ -224,4 +224,4 @@ definitions:
     - nodejs6.10
     - python2.7
     - python3.6
-    default: python2.6
+    default: python2.7
