@@ -16,7 +16,6 @@ from gcdt import utils
 from gcdt.gcdt_cmd_dispatcher import cmd
 from gcdt.gcdt_logging import getLogger
 
-#from gcdt.gcdt_defaults import DEFAULT_CONFIG
 from .ramuda_core import list_functions, get_metrics, deploy_lambda, \
     bundle_lambda, delete_lambda_deprecated, rollback,\
     ping, info, cleanup_bundle, invoke, logs, delete_lambda

@@ -13,63 +13,88 @@ paths:
 
 definitions:
   ramuda:
+    description: 'The ramuda config is organized into the following structure:'
     type: object
     properties:
       bundling:
+        description: 'configure bundling details'
         $ref: '#/definitions/bundling'
       lambda:
+        description: 'configure the AWS Lambda function'
         $ref: '#/definitions/lambda'
       defaults:
+        description: 'finetune gcdt tool lifecycle (override at own risk)'
         $ref: '#/definitions/defaults'
     required:
     #- bundling
-    #- lambda
+    - lambda
     - defaults
     additionalProperties: false
 
   bundling:
+    description: 'Use the `bundling` section to configure your deployment artifact'
     type: object
     properties:
       folders:
-        $ref: '#/definitions/folders'
+        description: 'Array of source and target mappings for your bundle'
+        type: array
+        items:
+          $ref: '#/definitions/folder'
       zip:
+        description: 'filename of the bundle artifact'
         type: string
-        example: bundle.zip
+        default: bundle.zip
     required:
     - folders
     - zip
     additionalProperties: false
 
   lambda:
+    description: 'Use the `lambda` section to configure the AWS Lambda function'
     type: object
     properties:
       description:
+        description: "A short, user-defined function description. Lambda does not use this value. Assign a meaningful description as you see fit"
         type: string
-        example: Lambda function for playlist-autoselection-service
-      events:
-        $ref: '#/definitions/events'
+        example: Lambda function for my-service
+      #events:
+      #  description: "no chance to do this properly while we entertain two events implementations"
+      #  type: array
+      #  items:
+      #    enum:
+      #    - $ref: '#/definitions/eventItem'
+      #    - $ref: '#/definitions/scheduleItem'
+      #  example: [{"event_source": {"arn": "arn:aws:s3:::my-bucket", "events": ["s3:ObjectCreated:*"]}}]
       handlerFile:
+        description: "The function within your code that Lambda calls to begin execution"
         type: string
         example: lambda.js
       handlerFunction:
+        description: "The function within your code that Lambda calls to begin execution"
         type: string
         example: lambda.handler
       memorySize:
+        description: "The amount of memory, in MB, your Lambda function is given"
         type: string
         example: '128'
       name:
+        description: "The name you want to assign to the function you are uploading"
         type: string
-        example: mes-playlist-autoselection-service
+        example: my-service
       role:
+        description: "The Amazon Resource Name (ARN) of the IAM role that Lambda assumes when it executes your function to access any other Amazon Web Services (AWS) resources"
         $ref: '#/definitions/arn'
-        example: arn:aws:iam::979514658570:role/mes-playlist-autoselectio-role-1LY3BGOZ3CZPQ
+        example: arn:aws:iam::123456EXAMPLE:role/my-service-role-123EXAMPLE
       runtime:
+        description: "The runtime environment for the Lambda function you are uploading"
         $ref: '#/definitions/runtime'
-        example: nodejs6.10
+        default: python2.7
       timeout:
+        description: "The function execution time at which Lambda should terminate the function"
         type: string
         example: '15'
       vpc:
+        description: "optional VPC configuraiton"
         $ref: '#/definitions/vpc'
     required:
     - description
@@ -81,7 +106,8 @@ definitions:
     - role
     #- runtime
     #- timeout
-    - vpc
+    #- vpc
+    # to get the events thing in = TODO
     additionalProperties: false
 
   defaults:
@@ -89,45 +115,41 @@ definitions:
     description: 'Default properties to finetune gcdt tool lifecycle (override at own risk).'
     properties:
       non_config_commands:
+        description: 'ramuda commands that do not require a config file to run.'
         type: array
-        description: 'ramuda commands that do not require a config file.'
         default: ['logs', 'invoke']
         items:
           type: string
       validate:
+        description: 'use this if you need to switch off config validation.'
         type: boolean
-        description: 'validate the tool configuration against openapi spec.'
         default: true
       settings_file:
-        type: string
         description: 'filename of the settings file (incl. extension).'
-        default: 'settings.json'
-      runtime:
-        type: runtime
-        $ref: '#/definitions/runtime'
-      python_bundle_venv_dir:
         type: string
+        default: 'settings.json'
+      #runtime:
+      #  type: string
+      #  $ref: '#/definitions/runtime'
+      python_bundle_venv_dir:
         description: 'relative path the bundler uses for its virtualenv'
+        type: string
         default: '.gcdt/venv'
       keep:
+        description: 'keep the virtualenv for later reuse (default False)'
         type: boolean
-        description: 'keep the virtualenv for '
         default: false
     required:
     - non_config_commands
     - validate
     - settings_file
-    - runtime
+    #- runtime
     - python_bundle_venv_dir
     - keep
     additionalProperties: false
 
-  folders:
-    type: array
-    items:
-      $ref: '#/definitions/foldersItem'
-
-  foldersItem:
+  folder:
+    description: 'source to target mapping to select files for your bundle artifact'
     type: object
     properties:
       source:
@@ -141,67 +163,61 @@ definitions:
     - target
     additionalProperties: false
 
-  events:
-    #oneOf:
-    #- $ref: '#/definitions/eventsObject'
-    $ref: '#/definitions/eventsArray'
-
-  #eventsObject:
+  #eventItem:
   #  type: object
-  #  items:
-  #    type: string
-  #    example: todo
+  #  properties:
+  #    event_source:
+  #      type: object
+  #      properties:
+  #        arn:
+  #          $ref: "#/definitions/arn"
+  #        events:
+  #          type: array
+  #          items:
+  #            type: string
+  #            example: "s3:ObjectCreated:*"
+  #      required:
+  #      - arn
+  #      - events
+  #      additionalProperties: false
+  #    #required:
+  #    #- event_source
+  #  additionalProperties: false
 
-  eventsArray:
-    type: array
-    items:
-      $ref: '#/definitions/eventsArrayItem'
-
-  eventsArrayItem:
-    type: object
-    properties:
-      event_source:
-        #oneOf:
-        #- $ref: '#/definitions/eventsArrayItemEvent'
-        $ref: '#/definitions/eventsArrayItemSchedule'
-    required:
-    - event_source
-
-  eventsArrayItemEvent:
-    type: object
-    properties:
-      arn:
-        type: string
-        example: arn:aws:s3:::my-bucket
-      events:
-        type: array
-        items:
-          type: string
-          example: "s3:ObjectCreated:*"
-    required:
-    - arn
-    - events
-
-  eventsArrayItemSchedule:
-    type: object
-    properties:
-      name:
-        type: string
-        example: send_reminder_to_slack
-      schedule:
-        type: string
-        example: rate(1 minute)
-    required:
-    - name
-    - schedule
+  #scheduleItem:
+  #  type: object
+  #  properties:
+  #    event_source:
+  #      type: object
+  #      properties:
+  #        name:
+  #          type: string
+  #          example: send_reminder_to_slack
+  #        schedule:
+  #          type: string
+  #          example: rate(1 minute)
+  #      required:
+  #      - name
+  #      - schedule
+  #      additionalProperties: false
+  #    #required:
+  #    #- event_source
+  #  additionalProperties: false
 
   vpc:
+    description: "If your Lambda function accesses resources in a VPC, you provide this parameter identifying the list of security group IDs and subnet IDs"
     type: object
     properties:
       securityGroups:
-        $ref: '#/definitions/events'
+        description: "A list of one or more security groups IDs in your VPC"
+        type: array
+        items:
+          $ref: '#/definitions/securityGroup'
       subnetIds:
-        $ref: '#/definitions/events'
+        description: "A list of one or more subnet IDs in your VPC"
+        type: array
+        items:
+          $ref: '#/definitions/subnetId'
     required:
     - securityGroups
     - subnetIds
@@ -218,6 +234,7 @@ definitions:
     pattern: "arn:aws:([a-zA-Z0-9-])+:([a-z]{2}-[a-z]+-\\d{1})?:(\\d{12})?:(.*)"
 
   runtime:
+    description: 'The runtime environment for the Lambda function you are uploading'
     type: string
     enum:
     - nodejs4.3
@@ -225,3 +242,13 @@ definitions:
     - python2.7
     - python3.6
     default: python2.7
+
+  subnetId:
+    type: string
+    pattern: "subnet-[a-z0-9]{8}"
+    example: "subnet-aabb123c"
+
+  securityGroup:
+    type: string
+    pattern: "sg-[a-z0-9]{8}"
+    example: "sg-aabb123c"

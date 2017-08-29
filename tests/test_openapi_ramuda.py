@@ -16,12 +16,11 @@ def test_scaffolding_default():
             'keep': False,
             'non_config_commands': ['logs', 'invoke'],
             'python_bundle_venv_dir': '.gcdt/venv',
-            'runtime': 'python2.6'
+            'runtime': 'python2.7'
         }
     }
 
     ramuda_defaults = get_openapi_defaults(spec, 'ramuda')
-    print(ramuda_defaults)
     assert ramuda_defaults == expected_defaults
     validate_tool_config(spec, {'ramuda': ramuda_defaults})
 
@@ -29,17 +28,26 @@ def test_scaffolding_default():
 def test_scaffolding_sample_min():
     spec = read_openapi()
     expected_sample = {
-        'codedeploy': {
-            'applicationName': u'string',
-            'deploymentConfigName': u'string',
-            'deploymentGroupName': u'string'
+        'defaults': {
+            'validate': True,
+            'settings_file': 'settings.json',
+            'keep': False,
+            'non_config_commands': ['logs', 'invoke'],
+            'python_bundle_venv_dir': '.gcdt/venv',
+            'runtime': 'python2.7'
         },
 
-        'defaults': {
-            'log_group': '/var/log/messages',
-            'settings_file': 'settings.json',
-            'stack_output_file': 'stack_output.yml',
-            'validate': True
+        'lambda': {
+            'description': 'Lambda function for my-service',
+            #'events': [OrderedDict([('event_source', OrderedDict([('arn', 'arn:aws:s3:::my-bucket'), ('events', ['s3:ObjectCreated:*'])]))])],
+            'handlerFile': 'lambda.js',
+            'handlerFunction': 'lambda.handler',
+            'name': 'my-service',
+            'role': 'arn:aws:iam::123456EXAMPLE:role/my-service-role-123EXAMPLE',
+            'vpc': {
+                'securityGroups': ['sg-aabb123c'],
+                'subnetIds': ['subnet-aabb123c']
+            },
         }
     }
 

@@ -149,9 +149,7 @@ def test_deploy_delete_cmds(awsclient, vendored_folder, cleanup_roles,
 
     tooldata = get_tooldata(awsclient, 'ramuda', 'deploy', config=config)
     tooldata['context']['_arguments'] = {'--keep': False}
-    context = {'tool': 'ramuda'}
-    # TODO
-    incept_defaults((context, config))
+    incept_defaults((tooldata['context'], {'ramuda': tooldata['config']}))
 
     bundle((tooldata['context'], {'ramuda': tooldata['config']}))
     deploy_cmd(False, **tooldata)
