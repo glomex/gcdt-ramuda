@@ -104,9 +104,9 @@ def deploy_cmd(keep, **tooldata):
     runtime = config['lambda'].get('runtime', 'python2.7')
     environment = config['lambda'].get('environment', {})
     retention_in_days = config['lambda'].get('logs', {}).get('retentionInDays', None)
-    if runtime:
-        #assert runtime in DEFAULT_CONFIG['ramuda']['runtime']
-        assert runtime in config['defaults']['runtime']
+    # this validation is now covered by openapi
+    #if runtime:
+    #    #assert runtime in DEFAULT_CONFIG['ramuda']['runtime']
     settings = config['lambda'].get('settings', None)
     exit_code = deploy_lambda(
         awsclient, lambda_name, role_arn, handler_filename,

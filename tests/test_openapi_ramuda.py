@@ -15,8 +15,7 @@ def test_scaffolding_default():
             'settings_file': 'settings.json',
             'keep': False,
             'non_config_commands': ['logs', 'invoke'],
-            'python_bundle_venv_dir': '.gcdt/venv',
-            'runtime': 'python2.7'
+            'python_bundle_venv_dir': '.gcdt/venv'
         }
     }
 
@@ -33,55 +32,28 @@ def test_scaffolding_sample_min():
             'settings_file': 'settings.json',
             'keep': False,
             'non_config_commands': ['logs', 'invoke'],
-            'python_bundle_venv_dir': '.gcdt/venv',
-            'runtime': 'python2.7'
+            'python_bundle_venv_dir': '.gcdt/venv'
         },
 
         'lambda': {
-            'description': 'Lambda function for my-service',
-            #'events': [OrderedDict([('event_source', OrderedDict([('arn', 'arn:aws:s3:::my-bucket'), ('events', ['s3:ObjectCreated:*'])]))])],
-            'handlerFile': 'lambda.js',
             'handlerFunction': 'lambda.handler',
-            'name': 'my-service',
             'role': 'arn:aws:iam::123456EXAMPLE:role/my-service-role-123EXAMPLE',
-            'vpc': {
-                'securityGroups': ['sg-aabb123c'],
-                'subnetIds': ['subnet-aabb123c']
-            },
+            'description': 'Lambda function for my-service',
+            'name': 'my-service',
+            'handlerFile': 'lambda.js'
         }
     }
 
     ramuda_sample = get_openapi_scaffold_min(spec, 'ramuda')
+    #print(ramuda_sample)
     assert ramuda_sample == expected_sample
     validate_tool_config(spec, {'ramuda': ramuda_sample})
 
 
 def test_scaffolding_sample_max():
     spec = read_openapi()
-    expected_sample = {
-        'codedeploy': {
-            'applicationName': 'string',
-            'deploymentGroupName': 'string',
-            'artifactsBucket': 'string',
-            'deploymentConfigName': 'string'
-        },
+    expected_sample = {'bundling': {'folders': [{'source': './node_modules', 'target': './node_modules'}], 'zip': 'bundle.zip'}, 'settings': {u'any_prop2': 42, u'any_prop1': u'string'}, 'defaults': {'python_bundle_venv_dir': '.gcdt/venv', 'validate': True, 'non_config_commands': ['logs', 'invoke'], 'settings_file': 'settings.json', 'keep': False}, 'lambda': {'vpc': {'subnetIds': ['subnet-aabb123c'], 'securityGroups': ['sg-aabb123c']}, 'description': 'Lambda function for my-service', 'memorySize': '128', 'logs': {'retentionInDays': 90}, 'handlerFunction': 'lambda.handler', 'role': 'arn:aws:iam::123456EXAMPLE:role/my-service-role-123EXAMPLE', 'timeout': '15', 'handlerFile': 'lambda.js', 'runtime': 'python2.7', 'name': 'my-service'}}
 
-        'bundling': {
-            'folders': {
-                'folders': [{'source': './node_modules', 'target': './node_modules'}]
-            },
-            'zip': 'bundle.zip'
-        },
-
-        'defaults': {
-            'validate': True,
-            'log_group': '/var/log/messages',
-            'stack_output_file': 'stack_output.yml',
-            'settings_file': 'settings.json'
-        }
-    }
-
-    ramuda_sample = get_openapi_scaffold_max(spec, 'tenkai')
-    #print(ramuda_sample)
+    ramuda_sample = get_openapi_scaffold_max(spec, 'ramuda')
     assert ramuda_sample == expected_sample
-    validate_tool_config(spec, {'tenkai': ramuda_sample})
+    validate_tool_config(spec, {'ramuda': ramuda_sample})
