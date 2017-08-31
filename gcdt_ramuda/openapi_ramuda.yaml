@@ -22,6 +22,9 @@ definitions:
       lambda:
         description: 'configure the AWS Lambda function'
         $ref: '#/definitions/lambda'
+      deployment:
+        description: 'configure the AWS Lambda function'
+        $ref: '#/definitions/deployment'
       settings:
         description: 'Ramuda supports a settings section. If used a settings.json file is added to the zip bundle'
         type: object
@@ -69,6 +72,12 @@ definitions:
       #    - $ref: '#/definitions/eventItem'
       #    - $ref: '#/definitions/scheduleItem'
       #  example: [{"event_source": {"arn": "arn:aws:s3:::my-bucket", "events": ["s3:ObjectCreated:*"]}}]
+      events:
+        description: "no chance to do this properly while we entertain two events implementations"
+        enum:
+        - $ref: '#/definitions/eventArray'
+        - $ref: '#/definitions/eventObject'
+        example: [{"event_source": {"arn": "arn:aws:s3:::my-bucket", "events": ["s3:ObjectCreated:*"]}}]
       handlerFile:
         description: "The function within your code that Lambda calls to begin execution"
         type: string
@@ -79,8 +88,8 @@ definitions:
         example: lambda.handler
       memorySize:
         description: "The amount of memory, in MB, your Lambda function is given"
-        type: string
-        example: '128'
+        type: integer
+        example: 128
       name:
         description: "The name you want to assign to the function you are uploading"
         type: string
@@ -95,8 +104,8 @@ definitions:
         default: python2.7
       timeout:
         description: "The function execution time at which Lambda should terminate the function"
-        type: string
-        example: '15'
+        type: integer
+        example: 300
       vpc:
         description: "optional VPC configuraiton"
         $ref: '#/definitions/vpc'
@@ -121,6 +130,17 @@ definitions:
     # to get the events thing in = TODO
     additionalProperties: false
 
+  deployment:
+    description: "configuration details related to ramuda deployment"
+    type: object
+    properties:
+      region:
+        type: string
+        example: "eu-west-1"
+      artifactBucket:
+        type: string
+        example: "infra-dev-deployment"
+
   defaults:
     type: object
     description: 'Default properties to finetune gcdt tool lifecycle (override at own risk).'
@@ -139,9 +159,6 @@ definitions:
         description: 'filename of the settings file (incl. extension).'
         type: string
         default: 'settings.json'
-      #runtime:
-      #  type: string
-      #  $ref: '#/definitions/runtime'
       python_bundle_venv_dir:
         description: 'relative path the bundler uses for its virtualenv'
         type: string
@@ -153,7 +170,7 @@ definitions:
     required:
     - non_config_commands
     - validate
-    - settings_file
+    #- settings_file
     #- runtime
     - python_bundle_venv_dir
     - keep
@@ -174,46 +191,60 @@ definitions:
     - target
     additionalProperties: false
 
-  #eventItem:
-  #  type: object
-  #  properties:
-  #    event_source:
-  #      type: object
-  #      properties:
-  #        arn:
-  #          $ref: "#/definitions/arn"
-  #        events:
-  #          type: array
-  #          items:
-  #            type: string
-  #            example: "s3:ObjectCreated:*"
-  #      required:
-  #      - arn
-  #      - events
-  #      additionalProperties: false
-  #    #required:
-  #    #- event_source
-  #  additionalProperties: false
+  eventObject:
+    description: ""
+    type: object
+    additionalProperties: true
 
-  #scheduleItem:
-  #  type: object
-  #  properties:
-  #    event_source:
-  #      type: object
-  #      properties:
-  #        name:
-  #          type: string
-  #          example: send_reminder_to_slack
-  #        schedule:
-  #          type: string
-  #          example: rate(1 minute)
-  #      required:
-  #      - name
-  #      - schedule
-  #      additionalProperties: false
-  #    #required:
-  #    #- event_source
-  #  additionalProperties: false
+  eventArray:
+    description: "no chance to do this properly while we entertain two events implementations"
+    type: array
+    items:
+      enum:
+      - $ref: '#/definitions/eventItem'
+      - $ref: '#/definitions/scheduleItem'
+    example: [{"event_source": {"arn": "arn:aws:s3:::my-bucket", "events": ["s3:ObjectCreated:*"]}}]
+
+  eventItem:
+    type: object
+    properties:
+      event_source:
+        type: object
+        properties:
+          arn:
+            $ref: "#/definitions/arn"
+          events:
+            type: array
+            items:
+              type: string
+              example: "s3:ObjectCreated:*"
+        required:
+        - arn
+        - events
+        additionalProperties: false
+      #required:
+      #- event_source
+    additionalProperties: false
+
+  scheduleItem:
+    type: object
+    properties:
+      event_source:
+        type: object
+        properties:
+          name:
+            type: string
+            example: send_reminder_to_slack
+          schedule:
+            type: string
+            example: rate(1 minute)
+        required:
+        - name
+        - schedule
+        additionalProperties: false
+      #required:
+      #- event_source
+    additionalProperties: false
 
   vpc:
     description: "If your Lambda function accesses resources in a VPC, you provide this parameter identifying the list of security group IDs and subnet IDs"
