@@ -37,7 +37,7 @@ DOC = '''Usage:
         ramuda clean
         ramuda bundle [--keep] [-v]
         ramuda deploy [--keep] [-v]
-        ramuda list
+        ramuda list [-v]
         ramuda metrics <lambda>
         ramuda info
         ramuda wire [-v]

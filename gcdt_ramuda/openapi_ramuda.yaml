@@ -29,11 +29,14 @@ definitions:
         description: 'Ramuda supports a settings section. If used a settings.json file is added to the zip bundle'
         type: object
         additionalProperties: true
+      settings_text:
+        description: 'Ramuda supports a settings section. If used a settings.conf file is added to the zip bundle'
+        type: string
       defaults:
         description: 'finetune gcdt tool lifecycle (override at own risk)'
         $ref: '#/definitions/defaults'
     required:
-    #- bundling
+    - bundling
     - lambda
     - defaults
     additionalProperties: false
@@ -51,9 +54,14 @@ definitions:
         description: 'filename of the bundle artifact'
         type: string
         default: bundle.zip
+      settings_file:
+        description: 'filename of the settings file (incl. extension).'
+        type: string
+        default: 'settings.json'
     required:
     - folders
     - zip
+    - settings_file
     additionalProperties: false
 
   lambda:
@@ -72,12 +80,6 @@ definitions:
       #    - $ref: '#/definitions/eventItem'
       #    - $ref: '#/definitions/scheduleItem'
       #  example: [{"event_source": {"arn": "arn:aws:s3:::my-bucket", "events": ["s3:ObjectCreated:*"]}}]
-      events:
-        description: "no chance to do this properly while we entertain two events implementations"
-        enum:
-        - $ref: '#/definitions/eventArray'
-        - $ref: '#/definitions/eventObject'
-        example: [{"event_source": {"arn": "arn:aws:s3:::my-bucket", "events": ["s3:ObjectCreated:*"]}}]
       handlerFile:
         description: "The function within your code that Lambda calls to begin execution"
         type: string
@@ -116,19 +118,18 @@ definitions:
             description: "Possible values for the log retention in days are: 1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, and 3653"
             type: integer
             example: 90
+      environment:
+        type: object
+        additionalProperties: true
+        example: {"MYVALUE": "FOO"}
     required:
     - description
-    #- events
     - handlerFile
     - handlerFunction
-    #- memorySize
     - name
     - role
-    #- runtime
-    #- timeout
-    #- vpc
-    # to get the events thing in = TODO
-    additionalProperties: false
+    # workaround to get the events thing in = TODO
+    additionalProperties: true
 
   deployment:
     description: "configuration details related to ramuda deployment"
@@ -155,10 +156,6 @@ definitions:
         description: 'use this if you need to switch off config validation.'
         type: boolean
         default: true
-      settings_file:
-        description: 'filename of the settings file (incl. extension).'
-        type: string
-        default: 'settings.json'
       python_bundle_venv_dir:
         description: 'relative path the bundler uses for its virtualenv'
         type: string
@@ -191,60 +188,46 @@ definitions:
     - target
     additionalProperties: false
 
-  eventObject:
-    description: ""
-    type: object
-    additionalProperties: true
+  #eventItem:
+  #  type: object
+  #  properties:
+  #    event_source:
+  #      type: object
+  #      properties:
+  #        arn:
+  #          $ref: "#/definitions/arn"
+  #        events:
+  #          type: array
+  #          items:
+  #            type: string
+  #            example: "s3:ObjectCreated:*"
+  #      required:
+  #      - arn
+  #      - events
+  #      additionalProperties: false
+  #    #required:
+  #    #- event_source
+  #  additionalProperties: false
 
-  eventArray:
-    description: "no chance to do this properly while we entertain two events implementations"
-    type: array
-    items:
-      enum:
-      - $ref: '#/definitions/eventItem'
-      - $ref: '#/definitions/scheduleItem'
-    example: [{"event_source": {"arn": "arn:aws:s3:::my-bucket", "events": ["s3:ObjectCreated:*"]}}]
-
-  eventItem:
-    type: object
-    properties:
-      event_source:
-        type: object
-        properties:
-          arn:
-            $ref: "#/definitions/arn"
-          events:
-            type: array
-            items:
-              type: string
-              example: "s3:ObjectCreated:*"
-        required:
-        - arn
-        - events
-        additionalProperties: false
-      #required:
-      #- event_source
-    additionalProperties: false
-
-  scheduleItem:
-    type: object
-    properties:
-      event_source:
-        type: object
-        properties:
-          name:
-            type: string
-            example: send_reminder_to_slack
-          schedule:
-            type: string
-            example: rate(1 minute)
-        required:
-        - name
-        - schedule
-        additionalProperties: false
-      #required:
-      #- event_source
-    additionalProperties: false
+  #scheduleItem:
+  #  type: object
+  #  properties:
+  #    event_source:
+  #      type: object
+  #      properties:
+  #        name:
+  #          type: string
+  #          example: send_reminder_to_slack
+  #        schedule:
+  #          type: string
+  #          example: rate(1 minute)
+  #      required:
+  #      - name
+  #      - schedule
+  #      additionalProperties: false
+  #    #required:
+  #    #- event_source
+  #  additionalProperties: false
 
   vpc:
     description: "If your Lambda function accesses resources in a VPC, you provide this parameter identifying the list of security group IDs and subnet IDs"

@@ -280,6 +280,7 @@ def _create_lambda(awsclient, function_name, role, handler_filename,
     log.debug('lambda create completed...')
 
     function_version = response['Version']
+    log.info('\n')
     log.info(json2table(response))
     # FIXME: 23.08.2016 WHY update configuration after create?
     # timing issue:
@@ -625,7 +626,7 @@ def cleanup_bundle():
         * vendored/*
         * bundle.zip
     """
-    paths = ['./vendored', './bundle.zip']
+    paths = ['./vendored', './bundle.zip', 'node_modules', 'nodeenv', '.gcdt']
     for path in paths:
         if os.path.exists(path):
             log.debug("Deleting %s..." % path)

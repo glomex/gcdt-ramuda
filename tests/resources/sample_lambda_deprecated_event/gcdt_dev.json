@@ -1,0 +1,62 @@
+{
+  "ramuda": {
+    "bundling": {
+      "folders": [
+        {
+          "source": "./vendored", 
+          "target": "."
+        }, 
+        {
+          "source": "./impl", 
+          "target": "impl"
+        }
+      ], 
+      "zip": "bundle.zip"
+    }, 
+    "deployment": {
+      "artifactBucket": "7finity-infra-dev-deployment", 
+      "region": "eu-west-1"
+    }, 
+    "lambda": {
+      "description": "lambda test for ramuda", 
+      "events": {
+        "s3Sources": [
+          {
+            "bucket": "unittest-lambda-event", 
+            "suffix": ".gz", 
+            "type": "s3:ObjectCreated:*"
+          }
+        ], 
+        "timeSchedules": [
+          {
+            "ruleDescription": "run every 5 min from 0-5", 
+            "ruleName": "infra-dev-sample-lambda-jobr-T1", 
+            "scheduleExpression": "cron(0/5 0-5 ? * * *)"
+          }, 
+          {
+            "ruleDescription": "run every 5 min from 8-23:59", 
+            "ruleName": "infra-dev-sample-lambda-jobr-T2", 
+            "scheduleExpression": "cron(0/5 8-23:59 ? * * *)"
+          }
+        ]
+      }, 
+      "handlerFile": "handler.py", 
+      "handlerFunction": "handler.handle", 
+      "memorySize": 256, 
+      "name": "infra-dev-sample-lambda-unittest", 
+      "role": "arn:aws:iam::420189626185:role/7f-selfassign/infra-dev-CommonLambdaRole-CEQQX3SPUTFX", 
+      "timeout": 300, 
+      "vpc": {
+        "securityGroups": [
+          "sg-660dd700"
+        ], 
+        "subnetIds": [
+          "subnet-d5ffb0b1", 
+          "subnet-d5ffb0b1", 
+          "subnet-d5ffb0b1", 
+          "subnet-e9db9f9f"
+        ]
+      }
+    }
+  }
+}
