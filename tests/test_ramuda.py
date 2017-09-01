@@ -11,15 +11,13 @@ from tempfile import NamedTemporaryFile
 import time
 
 from s3transfer.subscribers import BaseSubscriber
-from nose.tools import assert_regexp_matches
 import pytest
 import mock
 import maya
-
-from gcdt.utils import json2table
 from gcdt_testtools.helpers import create_tempfile, get_size, temp_folder, \
     cleanup_tempfiles
 from gcdt_testtools.helpers import logcapture  # fixtures!
+from gcdt_testtools.helpers import assert_regexp_matches
 
 from gcdt_ramuda.ramuda_core import cleanup_bundle, bundle_lambda
 from gcdt_ramuda.ramuda_utils import aggregate_datapoints, \
@@ -27,8 +25,6 @@ from gcdt_ramuda.ramuda_utils import aggregate_datapoints, \
     list_of_dict_equals, create_aws_s3_arn, get_rule_name_from_event_arn, \
     get_bucket_from_s3_arn, build_filter_rules, create_sha256_urlsafe, \
     check_and_format_logs_params
-
-from . import here
 
 
 PY3 = sys.version_info[0] >= 3

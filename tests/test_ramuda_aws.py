@@ -8,7 +8,6 @@ import time
 import os
 import pytest
 from gcdt_bundler.bundler import get_zipped_file
-from nose.tools import assert_equal, assert_in, assert_not_in
 
 from gcdt import utils
 from gcdt_testtools.helpers_aws import create_role_helper, delete_role_helper, \
@@ -69,7 +68,7 @@ def temp_lambda(awsclient):
     role_arn = create_lambda_role_helper(awsclient, role_name)
     create_lambda_helper(awsclient, lambda_name, role_arn,
                          # './resources/sample_lambda/handler.py',
-                         here('./resources/sample_lambda/handler.py'),
+                         here('./resources/sample_lambda_deprecated_event/handler.py'),
                          lambda_handler='handler.handle')
     yield lambda_name, role_name, role_arn
     # cleanup
@@ -214,11 +213,11 @@ def test_create_lambda_nodejs(runtime, awsclient, temp_folder, cleanup_lambdas_d
     log.info('running test_create_lambda_nodejs')
     # copy package.json and settings_dev.conf from sample
     shutil.copy(
-        here('./resources/sample_lambda_nodejs/index.js'), temp_folder[0])
+        here('./resources/sample_lambda_nodejs_hocon/index.js'), temp_folder[0])
     shutil.copy(
-        here('./resources/sample_lambda_nodejs/package.json'), temp_folder[0])
+        here('./resources/sample_lambda_nodejs_hocon/package.json'), temp_folder[0])
     shutil.copy(
-        here('./resources/sample_lambda_nodejs/settings_dev.conf'),
+        here('./resources/sample_lambda_nodejs_hocon/settings_dev.conf'),
         temp_folder[0])
     temp_string = utils.random_string()
     lambda_name = 'jenkins_test_' + temp_string
@@ -350,7 +349,7 @@ def test_create_lambda_with_s3(awsclient, vendored_folder, cleanup_lambdas_depre
             "name": "dp-dev-sample-lambda-jobr1",
             "description": "lambda nodejs test for ramuda",
             "handlerFunction": "handler.handle",
-            "handlerFile": "./resources/sample_lambda/handler.py",
+            "handlerFile": "./resources/sample_lambda_deprecated_event/handler.py",
             "timeout": 300,
             "memorySize": 256,
             "events": {
@@ -451,10 +450,10 @@ def test_update_lambda(awsclient, vendored_folder, cleanup_lambdas_deprecated,
     role_arn = create_lambda_role_helper(awsclient, role_name)
     cleanup_roles.append(role_name)
     create_lambda_helper(awsclient, lambda_name, role_arn,
-                         './resources/sample_lambda/handler.py')
+                         './resources/sample_lambda_deprecated_event/handler.py')
     # update the function
     create_lambda_helper(awsclient, lambda_name, role_arn,
-                         './resources/sample_lambda/handler_v2.py')
+                         './resources/sample_lambda_deprecated_event/handler_v2.py')
     cleanup_lambdas_deprecated.append(lambda_name)
 
 
@@ -471,7 +470,7 @@ def test_lambda_add_invoke_permission(awsclient, vendored_folder,
     role_arn = create_lambda_role_helper(awsclient, role_name)
     cleanup_roles.append(role_name)
     create_lambda_helper(awsclient, lambda_name, role_arn,
-                         './resources/sample_lambda/handler_counter.py',
+                         './resources/sample_lambda_deprecated_event/handler_counter.py',
                          lambda_handler='handler_counter.handle')
     cleanup_lambdas_deprecated.append(lambda_name)
     bucket_name = temp_bucket
@@ -482,8 +481,8 @@ def test_lambda_add_invoke_permission(awsclient, vendored_folder,
 
     # {"Statement":"{\"Condition\":{\"ArnLike\":{\"AWS:SourceArn\":\"arn:aws:s3:::unittest-lambda-s3-bucket-coedce\"}},\"Action\":[\"lambda:InvokeFunction\"],\"Resource\":\"arn:aws:lambda:eu-west-1:188084614522:function:jenkins_test_coedce:ACTIVE\",\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"s3.amazonaws.com\"},\"Sid\":\"07c77fac-68ff-11e6-97f8-c4850848610b\"}"}
 
-    assert_not_in('Error', response)
-    assert_in('lambda:InvokeFunction', response['Statement'])
+    assert 'Error' not in response
+    assert 'lambda:InvokeFunction' in response['Statement']
     # TODO add more asserts!!
 
 
@@ -514,7 +513,7 @@ def test_update_lambda_configuration(awsclient, vendored_folder, temp_lambda):
 
     lambda_name = temp_lambda[0]
     role_arn = temp_lambda[2]
-    handler_function = './resources/sample_lambda/handler_counter.py'
+    handler_function = './resources/sample_lambda_deprecated_event/handler_counter.py'
     lambda_description = 'lambda created for unittesting ramuda deployment'
 
     timeout = 300
@@ -523,7 +522,7 @@ def test_update_lambda_configuration(awsclient, vendored_folder, temp_lambda):
                                                     role_arn, handler_function,
                                                     lambda_description, timeout,
                                                     memory_size)
-    assert_equal(function_version, '$LATEST')
+    assert function_version == '$LATEST'
 
 
 @pytest.mark.aws
@@ -550,39 +549,39 @@ def test_rollback(awsclient, vendored_folder, temp_lambda):
     lambda_name = temp_lambda[0]
     role_arn = temp_lambda[2]
     alias_version = _get_alias_version(awsclient, lambda_name, 'ACTIVE')
-    assert_equal(alias_version, '1')
+    assert alias_version == '1'
 
     # update the function
     create_lambda_helper(awsclient, lambda_name, role_arn,
-                         './resources/sample_lambda/handler_v2.py')
+                         './resources/sample_lambda_deprecated_event/handler_v2.py')
 
     # now we use function_version 2!
     alias_version = _get_alias_version(awsclient, lambda_name, 'ACTIVE')
-    assert_equal(alias_version, '$LATEST')
+    assert alias_version == '$LATEST'
 
     exit_code = rollback(awsclient, lambda_name, alias_name='ACTIVE')
-    assert_equal(exit_code, 0)
+    assert exit_code == 0
 
     # we rolled back to function_version 1
     alias_version = _get_alias_version(awsclient, lambda_name, 'ACTIVE')
-    assert_equal(alias_version, '1')
+    assert alias_version == '1'
 
     # try to rollback when previous version does not exist
     exit_code = rollback(awsclient, lambda_name, alias_name='ACTIVE')
-    assert_equal(exit_code, 1)
+    assert exit_code == 1
 
     # version did not change
     alias_version = _get_alias_version(awsclient, lambda_name, 'ACTIVE')
-    assert_equal(alias_version, '1')
+    assert alias_version == '1'
 
     # roll back to the latest version
     exit_code = rollback(awsclient, lambda_name, alias_name='ACTIVE',
                          version='$LATEST')
-    assert_equal(exit_code, 0)
+    assert exit_code == 0
 
     # latest version of lambda is used
     alias_version = _get_alias_version(awsclient, lambda_name, 'ACTIVE')
-    assert_equal(alias_version, '$LATEST')
+    assert alias_version == '$LATEST'
 
     # TODO: create more versions >5
     # TODO: do multiple rollbacks >5
@@ -591,9 +590,9 @@ def test_rollback(awsclient, vendored_folder, temp_lambda):
 
     # here we have the test for ramuda_utils.list_lambda_versions
     response = list_lambda_versions(awsclient, lambda_name)
-    assert_equal(response['Versions'][0]['Version'], '$LATEST')
-    assert_equal(response['Versions'][1]['Version'], '1')
-    assert_equal(response['Versions'][2]['Version'], '2')
+    assert response['Versions'][0]['Version'] == '$LATEST'
+    assert response['Versions'][1]['Version'] == '1'
+    assert response['Versions'][2]['Version'] == '2'
 
 
 @pytest.mark.aws
@@ -606,7 +605,7 @@ def test_get_remote_code_hash(awsclient, vendored_folder, temp_lambda):
     # NOTE: this only makes sense in 'normal' placebo mode (not with playback!)
     log.info('running test_get_remote_code_hash')
 
-    handler_filename = './resources/sample_lambda/handler.py'
+    handler_filename = './resources/sample_lambda_deprecated_event/handler.py'
     folders_from_file = [
         {'source': './vendored', 'target': '.'},
         {'source': './resources/sample_lambda/impl', 'target': 'impl'}
@@ -638,7 +637,7 @@ def test_ping(awsclient, vendored_folder, temp_lambda):
 
     # update the function
     create_lambda_helper(awsclient, lambda_name, role_arn,
-                         './resources/sample_lambda/handler_no_ping.py',
+                         './resources/sample_lambda_deprecated_event/handler_no_ping.py',
                          lambda_handler='handler_no_ping.handle')
 
     # test has no ping
