@@ -36,16 +36,7 @@ def test_scaffolding_sample_min():
             'folders': [{
                 'source': './node_modules',
                 'target': './node_modules'
-            }],
-            'settings_file': 'settings.json',
-            'zip': 'bundle.zip'
-        },
-
-        'defaults': {
-            'validate': True,
-            'keep': False,
-            'non_config_commands': ['logs', 'invoke'],
-            'python_bundle_venv_dir': '.gcdt/venv'
+            }]
         },
 
         'lambda': {
